@@ -1,19 +1,19 @@
-# uc2_nose_conic_insert_rotated_noses.py
-# CadQuery generator for a conic disk insert with patterned "noses" on the conic edge.
+# uc2_masterinsert.py
+# CadQuery generator for the UC2 master insert – a conic disk with 6 "nose"
+# features around the circumference.
 #
-# This version keeps your original core idea (base frustum + repeated local revolved features),
-# but changes the nose orientation:
-# - the nose revolution axis is rotated by 90 degrees compared to the old torus version
-# - axis is tangent to the disk circumference (local tangential direction)
-# - nose is positioned relative to the conic edge (82 degree side)
+# Each nose is created by **revolving a 2-D cross-section profile** around the
+# disk's symmetry axis (Z) over an arc of NOSE_SWEEP_DEG (98°).  Six such
+# noses are spaced evenly at 360°/6 = 60° centre-to-centre, leaving small
+# gaps between them.
 #
-# Important:
-# - Use NOSE_COUNT = 6 or 8 depending on your insert variant.
-# - Avoids .clean() during booleans because OCC can stall.
-# - Uses incremental union with glue=True for better robustness.
+# The nose cross-section is derived from the technical drawing:
+#   – Runs along the conic edge in the R-Z half-plane
+#   – Total axial span ≈ THICKNESS (4 mm)
+#   – Radial bump ≈ R_NOSE_MAX_MID − R_BASE_EDGE_MID
+#   – Rounded corners (R 0.25, R 1.3) as annotated
 #
-# Optical axis = Z through (0,0)
-# Units = mm
+# Optical axis = Z through (0,0).  Units = mm.
 
 from __future__ import annotations
 import math
@@ -24,63 +24,45 @@ import cadquery as cq
 # Explicit parameters
 # ============================================================
 
-# Output
+# Output files
 OUT_STEP = "uc2_nose_conic_insert.step"
-OUT_STL = "uc2_nose_conic_insert.stl"
+OUT_STL  = "uc2_nose_conic_insert.stl"
 
 # Main conic disk
-THICKNESS = 4.0
-SIDE_ANGLE_TO_FACE_DEG = 82.0  # angle between top face and conic side wall
+THICKNESS = 4.0                     # mm  total disk thickness
+SIDE_ANGLE_TO_FACE_DEG = 82.0      # angle between top face and conic sidewall
 
-# Base and nose radii (from your drawing)
-R_BASE_EDGE_MID = 19.18   # minimum radius of cone edge (without nose), at z=0
-R_NOSE_MAX_MID  = 20.05   # max radius with nose, roughly at z=0
+# Radii (from drawing)
+R_BASE_EDGE_MID = 19.18            # mm  cone edge radius at z = 0 (no nose)
+R_NOSE_MAX_MID  = 20.05            # mm  max radius with nose bump
 
-# Pattern count (set to 6 or 8)
-NOSE_COUNT = 6
-# NOSE_COUNT = 8
+# Number of noses and sweep angle per nose
+NOSE_COUNT     = 6
+NOSE_SWEEP_DEG = 98.0              # each nose is a 98° revolution arc
 
-# Nose geometry (from sketch, parametric)
-NOSE_TUBE_DIAMETER = 1.60
-NOSE_TUBE_R = NOSE_TUBE_DIAMETER / 2.0
+# Nose profile dimensions (from detailed cross-section sketch)
+NOSE_BUMP_HEIGHT  = R_NOSE_MAX_MID - R_BASE_EDGE_MID  # radial protrusion ≈ 0.87 mm
+NOSE_FILLET_SMALL = 0.25           # mm  fillet at profile corners (top/bottom)
+NOSE_FILLET_LARGE = 1.3            # mm  fillet at the bump crest
 
-# "Major radius" of the torus (distance from local torus axis to tube center)
-# In your sketch this looks around 0.5 mm, keep explicit/tunable.
-NOSE_MAJOR_R = 0.50
+# Axial segment lengths of the nose cross-section (from drawing annotations)
+NOSE_SEG_BOT  = 0.57              # mm  bottom flat segment (cone-following)
+NOSE_SEG_MID  = 2.537             # mm  middle bump segment
+NOSE_SEG_TOP  = 0.893             # mm  top flat segment (cone-following)
 
-# Placement of nose center relative to conic edge point in the radial-z section
-# local basis:
-#   u_side   = along cone side (in radial-z plane)
-#   u_normal = perpendicular to cone side (in radial-z plane, roughly outward)
-#
-# These are the key parameters to tune to match the sketch exactly.
-NOSE_CENTER_OFFSET_ALONG_SIDE = 0.00   # mm
-NOSE_CENTER_OFFSET_NORMAL     = 0.30   # mm (your sketch shows ~0.3)
-NOSE_BOOL_OVERLAP             = 0.08   # mm inward overlap into cone for robust union
+# How far the nose profile overlaps into the frustum for a robust boolean
+NOSE_BOOL_OVERLAP = 0.15           # mm
 
-# Nose reference z position on the cone edge
-NOSE_Z0 = 0.0  # mm (mid-plane of disk)
+# Fillets on base frustum
+FILLET_BASE_VERTICAL_EDGES = 0.12  # small fillet on any |Z edges of frustum
 
-# Optional radial fine tuning (if you want to hit 20.05 exactly)
-# Positive = shift nose outward radially, negative = inward
-NOSE_RADIAL_FINE_SHIFT = 0.00
+# Final optional operations
+ENABLE_FINAL_FILLET = False
+FILLET_FINAL        = 0.08
+DO_FINAL_CLEAN      = False
 
-# Optional clipping around the rim (can be disabled while debugging)
-ENABLE_RIM_TRIM = False
-TRIM_RADIAL_INNER_MARGIN = 1.2
-TRIM_RADIAL_OUTER_MARGIN = 1.0
-TRIM_Z_EXTRA = 1.0
-
-# Fillets
-FILLET_BASE_VERTICAL_EDGES = 0.12   # small, robust
-ENABLE_FINAL_FILLET = False         # set True later
-FILLET_FINAL = 0.08                 # small global fillet after unions
-
-# Final clean
-DO_FINAL_CLEAN = False
-
-# STL tessellation
-STL_LINEAR_TOL = 0.03
+# STL tessellation quality
+STL_LINEAR_TOL      = 0.03
 STL_ANGULAR_TOL_DEG = 3.0
 
 
@@ -88,19 +70,21 @@ STL_ANGULAR_TOL_DEG = 3.0
 # Derived geometry
 # ============================================================
 
-NOSE_STEP_DEG = 360.0 / NOSE_COUNT
+NOSE_SPACING_DEG = 360.0 / NOSE_COUNT   # 60° centre-to-centre
 
 # Frustum top and bottom radii from angle + thickness
 DR_HALF = (THICKNESS / 2.0) / math.tan(math.radians(SIDE_ANGLE_TO_FACE_DEG))
-R_TOP = R_BASE_EDGE_MID - DR_HALF
-R_BOT = R_BASE_EDGE_MID + DR_HALF
+R_TOP   = R_BASE_EDGE_MID - DR_HALF     # radius at z = +THICKNESS/2
+R_BOT   = R_BASE_EDGE_MID + DR_HALF     # radius at z = -THICKNESS/2
 
 
 # ============================================================
 # Robust helpers
 # ============================================================
 
-def safe_fillet(wp: cq.Workplane, radius: float, selector: str = "", attempts: int = 8) -> cq.Workplane:
+def safe_fillet(wp: cq.Workplane, radius: float,
+               selector: str = "", attempts: int = 8) -> cq.Workplane:
+    """Try to fillet edges; shrink radius on failure."""
     if radius <= 0:
         return wp
     r = float(radius)
@@ -116,6 +100,7 @@ def safe_fillet(wp: cq.Workplane, radius: float, selector: str = "", attempts: i
 
 
 def export_part(part: cq.Workplane) -> None:
+    """Write STEP and STL output files."""
     cq.exporters.export(part, OUT_STEP)
     cq.exporters.export(
         part,
@@ -126,11 +111,11 @@ def export_part(part: cq.Workplane) -> None:
 
 
 # ============================================================
-# Base conic disk
+# Base conic disk (frustum)
 # ============================================================
 
 def build_conic_disk() -> cq.Workplane:
-    # Frustum centered around Z=0
+    """Build a truncated cone (frustum) centred on Z = 0."""
     disk = (
         cq.Workplane("XY")
         .workplane(offset=-THICKNESS / 2.0)
@@ -139,143 +124,152 @@ def build_conic_disk() -> cq.Workplane:
         .circle(R_TOP)
         .loft(combine=True)
     )
-
-    # Small fillet on vertical-ish seam edges only (if any)
     if FILLET_BASE_VERTICAL_EDGES > 0:
-        disk = safe_fillet(disk, FILLET_BASE_VERTICAL_EDGES, selector="|Z", attempts=8)
-
+        disk = safe_fillet(disk, FILLET_BASE_VERTICAL_EDGES,
+                           selector="|Z", attempts=8)
     return disk
 
 
 # ============================================================
-# Nose geometry (rotated torus)
+# Nose profile & revolution
 # ============================================================
 
-def make_torus_axis_z(major_r: float, tube_r: float) -> cq.Solid:
-    """
-    Build a torus around local Z axis at origin.
-    """
-    wp = (
-        cq.Workplane("XZ")
-        .center(major_r, 0.0)
-        .circle(tube_r)
-        .revolve(angleDegrees=360, axisStart=(0, 0, 0), axisEnd=(0, 0, 1))
-    )
-    return wp.val()
-
-
-def cone_local_basis_at_plus_x() -> tuple[cq.Vector, cq.Vector]:
-    """
-    Local basis in XZ plane at azimuth 0 (+X side):
-    - u_side: along conic edge line (upwards, slightly inward)
-    - u_normal: perpendicular to cone side in XZ plane (roughly outward)
-    """
-    a = math.radians(SIDE_ANGLE_TO_FACE_DEG)
-    # Cone side goes upward and inward on +X side
-    u_side = cq.Vector(-math.cos(a), 0.0, math.sin(a)).normalized()
-    # Perpendicular in XZ plane
-    u_normal = cq.Vector(math.sin(a), 0.0, math.cos(a)).normalized()
-    return u_side, u_normal
-
-
-def cone_edge_radius_at_z(z: float) -> float:
-    """
-    Cone edge radius (without nose) at height z.
-    z=0 -> R_BASE_EDGE_MID
-    Positive z -> smaller radius (top)
-    """
+def _cone_radius_at_z(z: float) -> float:
+    """Cone edge radius (without nose) at height z.  z = 0 → R_BASE_EDGE_MID."""
     return R_BASE_EDGE_MID - z / math.tan(math.radians(SIDE_ANGLE_TO_FACE_DEG))
 
 
-def build_one_rotated_nose() -> cq.Solid:
+def _build_nose_profile_wire() -> cq.Wire:
     """
-    One nose at azimuth 0 (+X side), with torus axis rotated 90 degrees
-    so the torus axis is tangential to the disk (parallel to Y at azimuth 0).
+    Build the 2-D closed profile of one nose in the R-Z half-plane.
+
+    The profile sits radially outside the cone surface and will be revolved
+    around the Z axis.  It is drawn on the CadQuery "XZ" workplane where
+    X = radial distance from Z-axis, Z = axial height.
+
+    From the technical drawing the cross-section has three axial segments:
+      1) NOSE_SEG_BOT  (0.57 mm) – follows the cone surface at the bottom
+      2) NOSE_SEG_MID  (2.537 mm) – bump region protruding outward
+      3) NOSE_SEG_TOP  (0.893 mm) – follows the cone surface at the top
+
+    The bump rises NOSE_BUMP_HEIGHT above the cone surface.
+    Transitions are filleted with NOSE_FILLET_SMALL (0.25 mm) and
+    NOSE_FILLET_LARGE (1.3 mm).
     """
-    # Start with torus axis = Z
-    tor = make_torus_axis_z(NOSE_MAJOR_R, NOSE_TUBE_R)
+    half_t  = THICKNESS / 2.0
+    overlap = NOSE_BOOL_OVERLAP
+    bump_h  = NOSE_BUMP_HEIGHT  # radial protrusion (exact, no overlap added)
 
-    # Rotate torus axis Z -> Y (90 degree rotation about X)
-    # This is the key change compared to your old code.
-    tor = tor.rotate((0, 0, 0), (1, 0, 0), 90.0)
+    # Cone slope: dR/dZ  (positive Z → smaller R)
+    tan_a = math.tan(math.radians(SIDE_ANGLE_TO_FACE_DEG))
 
-    # Reference point on conic edge at z = NOSE_Z0
-    r_edge = cone_edge_radius_at_z(NOSE_Z0)
-    p_edge = cq.Vector(r_edge, 0.0, NOSE_Z0)
+    # Key Z positions along the profile (bottom = -half_t, top = +half_t)
+    z_bot       = -half_t                             # -2.0
+    z_bump_bot  = z_bot + NOSE_SEG_BOT                # -1.43
+    z_bump_top  = z_bump_bot + NOSE_SEG_MID           # +1.107
+    z_top       = +half_t                             # +2.0
 
-    # Local placement basis in radial-z section
-    u_side, u_normal = cone_local_basis_at_plus_x()
+    # Corresponding cone-surface radii at those Z positions
+    r_bot      = _cone_radius_at_z(z_bot)
+    r_bump_bot = _cone_radius_at_z(z_bump_bot)
+    r_bump_top = _cone_radius_at_z(z_bump_top)
+    r_top      = _cone_radius_at_z(z_top)
 
-    # Place the torus axis center relative to cone edge
-    # Move slightly inward for overlap (robust union)
-    p_center = (
-        p_edge
-        + u_side * NOSE_CENTER_OFFSET_ALONG_SIDE
-        + u_normal * (NOSE_CENTER_OFFSET_NORMAL - NOSE_BOOL_OVERLAP)
-        + cq.Vector(NOSE_RADIAL_FINE_SHIFT, 0.0, 0.0)
+    # Inner edge (overlap into cone body for robust boolean)
+    r_bot_inner = r_bot - overlap
+    r_top_inner = r_top - overlap
+
+    # Outer (bump) radii – constant at R_NOSE_MAX_MID (cylindrical outer surface)
+    r_bump_bot_outer = R_NOSE_MAX_MID
+    r_bump_top_outer = R_NOSE_MAX_MID
+
+    # Build closed profile clockwise in (R, Z):
+    #   inner-bottom → inner-top → outer-top-cone → outer-bump-top →
+    #   outer-bump-bottom → outer-bottom-cone → close
+    profile = (
+        cq.Workplane("XZ")
+        .moveTo(r_bot_inner, z_bot)
+        # Inner edge (follows cone line, shifted inward by overlap)
+        .lineTo(r_top_inner, z_top)
+        # Across top face to cone outer surface
+        .lineTo(r_top, z_top)
+        # Down along cone surface to bump-top transition
+        .lineTo(r_bump_top, z_bump_top)
+        # Transition outward to bump (upper shoulder)
+        .lineTo(r_bump_top_outer, z_bump_top)
+        # Along the bump crest (at peak radius)
+        .lineTo(r_bump_bot_outer, z_bump_bot)
+        # Transition inward from bump (lower shoulder)
+        .lineTo(r_bump_bot, z_bump_bot)
+        # Down along cone surface to bottom
+        .lineTo(r_bot, z_bot)
+        # Close back to start
+        .close()
     )
 
-    tor = tor.translate((p_center.x, p_center.y, p_center.z))
-    return tor
+    return profile
 
 
-def build_rim_trim_body() -> cq.Workplane:
+def build_one_nose_solid() -> cq.Solid:
     """
-    Optional annular trim body around the rim to clip oversized torus parts.
-    Disable while debugging booleans.
-    """
-    r_inner = R_BASE_EDGE_MID - TRIM_RADIAL_INNER_MARGIN
-    r_outer = R_NOSE_MAX_MID + TRIM_RADIAL_OUTER_MARGIN
-    h = THICKNESS + 2.0 * TRIM_Z_EXTRA
+    Revolve the nose profile around the global Z axis by NOSE_SWEEP_DEG.
 
-    outer = cq.Workplane("XY").circle(r_outer).extrude(h, both=True)
-    inner = cq.Workplane("XY").circle(r_inner).extrude(h, both=True)
-    annulus = outer.cut(inner)
-    return annulus
+    The profile is drawn on the CadQuery "XZ" workplane where:
+      local X = global X (radial direction)
+      local Y = global Z (axial direction)
+
+    To revolve around global Z we use axisEnd=(0, 1, 0) in local coords.
+    The revolution sweeps symmetrically about azimuth 0.
+    """
+    profile = _build_nose_profile_wire()
+
+    # Revolve around global Z axis = local Y axis on XZ workplane
+    revolved = profile.revolve(
+        angleDegrees=NOSE_SWEEP_DEG,
+        axisStart=(0, 0, 0),
+        axisEnd=(0, 1, 0),   # local Y = global Z
+    )
+
+    # The revolve starts at azimuth 0 and sweeps CCW by NOSE_SWEEP_DEG.
+    # Rotate back by half the sweep so the nose is centred on azimuth 0.
+    solid = revolved.val()
+    solid = solid.rotate((0, 0, 0), (0, 0, 1), -NOSE_SWEEP_DEG / 2.0)
+
+    return solid
 
 
 def build_nose_solids() -> list[cq.Solid]:
-    """
-    Pattern the rotated nose around Z.
-    """
-    one = build_one_rotated_nose()
-    nose_solids: list[cq.Solid] = []
-
-    trim = build_rim_trim_body() if ENABLE_RIM_TRIM else None
+    """Create all nose solids, evenly spaced around Z."""
+    one = build_one_nose_solid()
+    solids: list[cq.Solid] = []
 
     for k in range(NOSE_COUNT):
-        ang = k * NOSE_STEP_DEG
-        nk = one.rotate((0, 0, 0), (0, 0, 1), ang)
+        angle = k * NOSE_SPACING_DEG
+        rotated = one.rotate((0, 0, 0), (0, 0, 1), angle)
+        solids.append(rotated)
 
-        if trim is not None:
-            try:
-                nk_wp = cq.Workplane("XY").add(nk).intersect(trim)
-                vals = nk_wp.solids().vals()
-                nk = vals[0] if vals else nk_wp.val()
-            except Exception:
-                pass
-
-        nose_solids.append(nk)
-
-    return nose_solids
+    return solids
 
 
 # ============================================================
-# Robust incremental union (instead of base_solid.fuse(s))
+# Robust incremental union
 # ============================================================
 
-def union_incremental(base: cq.Workplane, solids: list[cq.Solid]) -> cq.Workplane:
-    """
-    Workplane.union(..., glue=True, clean=False) is often more stable than direct Solid.fuse.
-    """
+def union_incremental(base: cq.Workplane,
+                      solids: list[cq.Solid]) -> cq.Workplane:
+    """Union a list of Solids into a Workplane one-by-one (more stable)."""
     part = base
-
     for i, s in enumerate(solids):
-        print(f"Union nose {i+1}/{len(solids)}")
+        print(f"  Union nose {i + 1}/{len(solids)}")
         nose_wp = cq.Workplane("XY").add(s)
-        # glue=True helps when solids overlap/touch slightly
-        part = part.union(nose_wp, clean=False, glue=True)
-
+        try:
+            part = part.union(nose_wp, clean=False, glue=False)
+        except Exception:
+            # Fallback: try without glue flag
+            try:
+                part = part.union(nose_wp, clean=False)
+            except Exception as e:
+                print(f"    WARNING: union failed for nose {i+1}: {e}")
     return part
 
 
@@ -284,12 +278,11 @@ def union_incremental(base: cq.Workplane, solids: list[cq.Solid]) -> cq.Workplan
 # ============================================================
 
 def build_part() -> cq.Workplane:
-    base = build_conic_disk()
-
+    """Assemble base frustum + nose features."""
+    base  = build_conic_disk()
     noses = build_nose_solids()
-    part = union_incremental(base, noses)
+    part  = union_incremental(base, noses)
 
-    # Optional small final fillet
     if ENABLE_FINAL_FILLET and FILLET_FINAL > 0:
         part = safe_fillet(part, FILLET_FINAL, selector="", attempts=6)
 
@@ -307,10 +300,11 @@ def build_part() -> cq.Workplane:
 # ============================================================
 
 if __name__ == "__main__":
-    print("Building conic insert with rotated noses")
-    print(f"NOSE_COUNT = {NOSE_COUNT}")
-    print(f"R_TOP = {R_TOP:.3f} mm")
-    print(f"R_BOT = {R_BOT:.3f} mm")
+    print("Building UC2 master insert (conic disk + 6 revolved noses)")
+    print(f"  NOSE_COUNT     = {NOSE_COUNT}")
+    print(f"  NOSE_SWEEP_DEG = {NOSE_SWEEP_DEG}°")
+    print(f"  NOSE_SPACING   = {NOSE_SPACING_DEG}°")
+    print(f"  R_TOP = {R_TOP:.3f} mm,  R_BOT = {R_BOT:.3f} mm")
 
     p = build_part()
     export_part(p)
