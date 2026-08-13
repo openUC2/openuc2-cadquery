@@ -2,6 +2,30 @@
 
 Programmatic generation of an **openUC2 cube insert** and **component cutouts** using **CadQuery**.
 
+> **New: `uc2v4/` — exact parametric reconstructions of the molded V4 inserts.**
+> Built from the Inventor master models (COM extraction, see
+> [`extracted/README.md`](extracted/README.md)) and verified against the
+> released STEP geometry:
+>
+> - `uc2v4.build_master_insert()` → PRT - 2123 - MASLCK - V04 - B
+>   (4 mm master-insert plate: springs, corner ribs, 82° cone opening,
+>   8×45° nose grooves, self-mating screw pattern)
+> - `uc2v4.build_lens_insert()` → PRT - 2027 - INSLEND43F-50 - V04
+>   (17 mm lens insert: parametric `lens_diam`, pocket/seat/aperture,
+>   2-turn pitch-1.7 clamping thread for the pre-screw ring)
+>
+> ```bash
+> uv run --with cadquery --with trimesh --with rtree --with scipy python build_uc2v4.py
+> ```
+> writes STEP/STL into `generated/` and prints the mesh-deviation report
+> against `extracted/*.step`. Design write-up: [`DOCS-insert-v4-design.md`](DOCS-insert-v4-design.md).
+> The same lens insert is available to optikit-core as the standalone T3
+> generator `openuc2.tpl.square_insert_v4`.
+>
+> The scripts below predate the extraction and approximate the outline from
+> drawings — still useful as simple starting points, but `uc2v4/` is the
+> measured reference.
+
 ![](./IMAGES/insert.png)
 
 *Python-generated generic insert that can e.g. host a lens or something*
