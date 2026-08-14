@@ -286,10 +286,10 @@ def base_plate(iface: SquareInsertInterface, thickness: float) -> cq.Workplane:
     """
     ch = iface.outer_chamfer
     t2 = thickness / 2.0
-    wp = iface.outline_wire()
+    wp = iface.outline_wire() 
     if ch <= 0:
         return wp.extrude(t2, both=True).clean()
-
+    
     wire = wp.wires().val()
     off = wire.offset2D(-ch, kind="intersection")[0]
 

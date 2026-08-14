@@ -25,7 +25,7 @@ from dataclasses import dataclass, replace
 
 import cadquery as cq
 
-from .interface import SquareInsertInterface
+from interface import SquareInsertInterface
 
 
 @dataclass(frozen=True)
@@ -151,16 +151,18 @@ def build_lens_insert(params: LensInsertParams | None = None) -> cq.Workplane:
                 f"thread starts at z={thread_bot:.2f}, below the lead-in cone "
                 f"{cone_top_z:.2f}; raise thread_start_z")
 
-    from .interface import base_plate  # local import to avoid cycle noise
+    from interface import base_plate  # local import to avoid cycle noise
 
     part = base_plate(p.interface, p.thickness)
-    part = part.cut(_cavity_cut(p))
-    if p.thread:
-        part = part.union(_thread_solid(p))
+    if 0: 
+        part = part.cut(_cavity_cut(p))
+        if p.thread:
+            part = part.union(_thread_solid(p))
     return part.clean()
 
 
 if __name__ == "__main__":
     part = build_lens_insert()
     cq.exporters.export(part, "uc2v4_lens_insert.step")
+    cq.exporters.export(part, "uc2v4_lens_insert.stl")
     print("exported uc2v4_lens_insert.step")

@@ -30,7 +30,7 @@ from dataclasses import dataclass, replace
 
 import cadquery as cq
 
-from .interface import MasterInsertInterface, base_plate
+from interface import MasterInsertInterface, base_plate
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class MasterInsertParams:
     # corner ledges that rides in the cube track's center groove (measured:
     # crest at shoulder+0.8586, flat over z +-0.1414, 45 deg flanks down to
     # the ledge at z +-1.0, plan end rounded r0.5 just before the side face)
-    corner_rib: bool = True
+    corner_rib: bool = False
     rib_height: float = 0.8586
     rib_flat_half_z: float = 0.1414
     rib_flank_end_z: float = 1.0
@@ -239,5 +239,5 @@ def build_master_insert(params: MasterInsertParams | None = None) -> cq.Workplan
 
 if __name__ == "__main__":
     part = build_master_insert()
-    cq.exporters.export(part, "uc2v4_master_insert.step")
+    cq.exporters.export(part, "uc2v4_master_insert.stl")
     print("exported uc2v4_master_insert.step")
