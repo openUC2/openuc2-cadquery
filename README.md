@@ -43,9 +43,14 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > uv run --with cadquery python uc2v4/lens_cartridge.py --diameter 25.4 --thickness 3.5 --r1 51.5 --r2 -51.5 -x 3.0 -y -2.0 -z 6.1 --extension-front 1.5 --extension-back 1.5
 > ```
 >
+> Each run also writes a `*_layout.png` schematic of the cube, the notch grid,
+> the molded/printed sandwich and the lens, and engraves an identifying label
+> on each outward face.
+>
 > `check_lens_cartridge.py` verifies a generated pair (one solid per half, no
 > overlap, zero lens-to-holder collision, snug pocket, pose reproduced,
-> envelope respected).
+> envelope respected, **and the cone rings facing the joint** — the halves are
+> not symmetric and a mirrored build passes every other check).
 >
 > The scripts below predate the extraction and approximate the outline from
 > drawings — still useful as simple starting points, but `uc2v4/` is the
