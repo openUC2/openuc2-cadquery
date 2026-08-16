@@ -255,8 +255,8 @@ def plan_cartridge(lens: Lens, pose: Pose,
                 best = (key, name, idx, notch_z, joint_z)
         _, half_name, idx, notch_z, joint_z = best
 
-        limit = max(cube.notch_positions())
-        if abs(notch_z) > limit + 1e-9 or abs(pose.z_mm - joint_z) > t:
+        limit = max(cube.notch_positions()) 
+        if abs(notch_z) > limit + 1e-9 or abs(pose.z_mm - joint_z) > t: # TODO: We could make the insert hang out more so that it eventually goes into the cube's edge 
             raise ValueError(
                 f"z = {pose.z_mm} mm cannot be reached on the notch grid "
                 f"(notches at +-{limit} mm, pitch {cube.notch_pitch_mm} mm). "
@@ -452,19 +452,20 @@ def build_cartridge(plan: CartridgePlan) -> tuple[cq.Workplane, cq.Workplane]:
     p = plan.params
     t = p.master_thickness_mm
 
-    back_seat = p.seat(mid_z=-t / 2.0, skirt=t / 2.0 + p.extension_back_mm)
+    back_seat = p.seat(mid_z=-t / 2.0, skirt=10)
     back = build_base_holder(back_seat)                     # spans [-t-ext, 0]
+    cq.exporters.export(back,"intermediate.stl", tolerance=0.01)
     front = cq.Workplane("XY").add(
         build_base_holder(p.seat(mid_z=-t / 2.0,
                                  skirt=t / 2.0 + p.extension_front_mm)
                           ).val().mirror("XY"))             # spans [0, +t+ext]
 
-    cavity = _cavity(plan)
-    front = front.cut(cavity)
-    back = back.cut(cavity)
+    cavity = _cavity(plan)      # generate the lens pocket and the clear-aperture bore, already posed
+    front = front.cut(cavity)   # subtract the lens pocket and the clear-aperture bore from both halves
+    back = back.cut(cavity)     # subtract the lens pocket and the clear-aperture bore from both halves
 
     angles = _pin_angles(plan)
-    if angles:
+    if angles: # add bosses to the back half and cut sockets from the front half
         for boss in _pin_solids(plan, angles, socket=False):
             back = back.union(cq.Workplane("XY").add(boss))
         for socket in _pin_solids(plan, angles, socket=True):
@@ -553,4 +554,39 @@ def _cli() -> None:
 
 
 if __name__ == "__main__":
-    _cli()
+    if 0:
+        _cli()
+    else: # call the generate function excplictly with parameters
+        diameter = 25.4
+        thickness = 3.5
+        r1 = 51.5
+        r2 = -51.5
+        x = 2.0
+        y = -1.0
+        z = 7.3
+        rx = 0.0
+        ry = 0.0
+        rz = 0.0
+        out_dir = "generated"
+        stem = "lens_cartridge"
+        aperture = None
+        clearance = 0.15
+        extension_front = 0.0
+        extension_back = 0.0
+        snap_to_notch = True
+        alignment_pins = 2
+        
+        lens = Lens(diameter_mm=diameter, center_thickness_mm=thickness,
+                    r1_mm=r1, r2_mm=r2, reference="center")
+        pose = Pose(x_mm=x, y_mm=y, z_mm=z,
+                    rx_deg=rx, ry_deg=ry, rz_deg=rz)
+        params = CartridgeParams(clear_aperture_mm=aperture,
+                                 fit_clearance_mm=clearance,
+                                 extension_front_mm=extension_front,
+                                 extension_back_mm=extension_back,
+                                 snap_to_notch=snap_to_notch,
+                                 alignment_pins=alignment_pins)
+        plan = generate(lens, pose, out_dir, params=params, stem=stem)
+        # export as stl 
+        
+    
