@@ -7,6 +7,8 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > [`extracted/README.md`](extracted/README.md)) and verified against the
 > released STEP geometry:
 >
+> *Square-insert family* (`build_uc2v4.py`):
+>
 > - `uc2v4.build_master_insert()` → PRT - 2123 - MASLCK - V04 - B
 >   (4 mm master-insert plate: springs, corner ribs, 82° cone opening,
 >   8×45° nose grooves, self-mating screw pattern)
@@ -14,13 +16,21 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 >   (17 mm lens insert: parametric `lens_diam`, pocket/seat/aperture,
 >   2-turn pitch-1.7 clamping thread for the pre-screw ring)
 >
+> *Round-holder family* (`build_mirror_holder.py`):
+>
+> - `uc2v4.round_holder.build_base_holder()` → the reusable blank: the conic
+>   disk whose 8 noses are the exact positives of the master insert's
+>   grooves, so it seats on 45° indexing
+> - `uc2v4.round_holder.build_mirror_holder()` → PRT - 2111 - MASINSMIRHOLUPP - C
+>   (obround beam aperture + sandwich screw counterbores)
+>
 > ```bash
 > uv run --with cadquery --with trimesh --with rtree --with scipy python build_uc2v4.py
 > ```
 > writes STEP/STL into `generated/` and prints the mesh-deviation report
 > against `extracted/*.step`. Design write-up: [`DOCS-insert-v4-design.md`](DOCS-insert-v4-design.md).
-> The same lens insert is available to optikit-core as the standalone T3
-> generator `openuc2.tpl.square_insert_v4`.
+> Both families are available to optikit-core as standalone T3 generators
+> (`openuc2.tpl.square_insert_v4`, `openuc2.tpl.round_holder_v4`).
 >
 > The scripts below predate the extraction and approximate the outline from
 > drawings — still useful as simple starting points, but `uc2v4/` is the

@@ -21,19 +21,28 @@ data, vertices, mass properties). `--step` additionally saves a STEP copy.
 | --- | --- |
 | `PRT_-_2027_-_INSLEND43F-50_-_V04.{json,step}` | released lens insert (derived part) |
 | `PRT_-_2123_-_MASLCK_-_V04_-_B.{json,step}` | released master lock (derived part) |
+| `PRT_-_2111_-_MASINSMIRHOLUPP_-_C.{json,step}` | released 45° mirror holder (derived part) |
 | `MAS_-_2013_-_Square_Inserts_-_V04.json` | master model: square-insert family (5 bodies) |
 | `MAS_-_2003_-_Master_Insert_-_B.json` | master model: master insert + base holder |
+| `MAS_-_2007_-_Kinem_+_fixed_mirror_45°_+_90°_-_C.json` | master model: mirror holders (fixed-mirror branch rolled back) |
 | `inspect_step_sections.py` | exact section-edge dump of a STEP (verification oracle) |
 | `*_sections.json` | y=0 / z=0 / x=0 section edges of the released STEPs |
 
 ## What the extraction established
 
-- Both released parts are **derived parts**: the real parametric recipe
+- The released parts are all **derived parts**: the real parametric recipe
   lives in the MAS master models (Inventor master-model workflow).
   `INSLEND43F-50` derives from body *Insert for Lenses* of MAS-2013
   (user parameters `LensDiam`, `ThreadPitch`, `LensThicknessPos/Edge/Neg`);
   `MASLCK` derives from body *Master Insert* of MAS-2003
-  (`InsertDiam`, `OffsetDiameterBaseHolder`).
+  (`InsertDiam`, `OffsetDiameterBaseHolder`); `MASINSMIRHOLUPP` derives from
+  MAS-2007, which in turn derives its *Base holder* from MAS-2003 — so the
+  round-holder interface is one recipe shared by the whole round family.
+- A master model can have branches **rolled back** behind its end-of-part
+  marker: MAS-2007's live bodies are the kinematic-mount variant, while the
+  fixed-mirror body the released part derives from is not currently
+  computed. When the master and the released b-rep disagree, the released
+  part wins.
 - The common square-insert interface is parametrized in the masters as
   `Grid - 0.6` (envelope 49.4), `CubeClearWidth - 0.1|0.2` (shoulder
   33.9|33.8), `CubeClearDiagonalV04 - 0.2|0.4` (corner flats 53.54|53.34)

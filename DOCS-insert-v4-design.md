@@ -62,9 +62,9 @@ A 4 mm plate on the interface above, with a conic center opening:
   r 0.5.
 - **Base holder** (the round carrier all round inserts derive from): the
   complementary conic disk, offset **+0.05 mm** (`OffsetDiameterBaseHolder`)
-  for snap interference, with 8 matching noses. Result: any round insert
-  clicks into the master insert in **45° indexed orientations**, or is held
-  purely by friction between the teeth.
+  for snap interference, with 8 matching noses — see §5. Result: any round
+  insert clicks into the master insert in **45° indexed orientations**, or is
+  held purely by friction between the teeth.
 - **Self-mating screw pattern**: at (±21.4, ±13.6) each half carries one
   diagonal pair of Ø1.9 thread-forming pilot holes (3.5 deep from the top,
   45° relief cone breaking through the bottom) and one diagonal pair of
@@ -92,26 +92,85 @@ lens onto the seat — lens exchange without tools, preload without glue.
 The naming encodes the optic: `INSLEND43F-50` = insert, lens end,
 Ø43 mm, f = 50 mm.
 
-## 5. Parametric CAD layer (this repo + optikit-core)
+## 5. The round base holder (MAS-2003 body *Base holder*)
 
-- `uc2v4/` (CadQuery): `build_master_insert()` and `build_lens_insert()`
-  reproduce PRT-2123 / PRT-2027 from the extracted parameters and are
-  verified against the released STEPs by `build_uc2v4.py`
-  (mesh deviation p99 ≤ 0.1 mm; the only knowing deviations are the
-  omitted engraved labels, the notch rim blends and thread run-out ends).
-  Everything is a dataclass parameter: grid, shoulder, thickness, springs
-  on/off, notch count/phase, hole pattern, `lens_diam`, thread…
-- `optikit-core/generators/square_insert_v4.py`: the same lens insert as a
-  standalone WP-10 T3 generator (`openuc2.tpl.square_insert_v4`), so
-  optikit can generate correct-interface holders for arbitrary round optics
-  directly inside cube slots.
+Everything round that goes into a cube — mirror holders, laser holders, the
+MASINS\* family — is the **base holder** disk plus its own pocketing. It is
+the negative counterpart of the master insert's cone and grooves:
+
+| feature | value |
+| --- | --- |
+| widest radius (at the band's bottom plane) | 20.0505 mm = Ø40/2 + 0.05/cos 8° |
+| wall | **82°** to the face (8° from the axis), same cone as the master insert |
+| interface band height | 4.0 mm — exactly the master insert's thickness |
+| blend to the top face | r 0.35 (top face radius 19.1841 mm) |
+| noses | 8 at 22.5° + k·45°, Ø1.6 |
+
+`OffsetDiameterBaseHolder = 0.05 mm` is a **face** offset, not a radial one,
+so on the 82° wall it becomes 0.050491 mm radially — that is the snap
+interference against the master insert's cone.
+
+**The nose is the groove.** The nose and the master insert's groove are
+generated from the *same* line: an axis parallel to the cone wall, inset
+0.3 mm perpendicular to it, swept with the same Ø1.6 circle. The master
+insert subtracts it (ending in an R1.3 spherical pocket), the base holder
+adds it (ending in a cap that is a 1.0 mm circle revolved about the axis
+0.1 mm off-center, blended to the shank with r 0.2). The nose axis bottom is
+placed exactly so its tilted flat end is tangent to the band's bottom plane,
+which is what lets the tooth bottom out cleanly. Both parts therefore mate
+along a nominal line contact and index every 45°.
+
+## 6. The 45° mirror holder (MAS-2007 → PRT-2111 MASINSMIRHOLUPP)
+
+The base holder plus a 0.4 mm skirt below the band (so the disk stands
+proud of the master insert), and:
+
+- an **obround beam aperture**, lobes Ø10 at (6, ±2), i.e. 10 × 14 mm
+  clear, sitting 6 mm off the optical axis — a 45° fold mirror's footprint
+  is an ellipse, so the opening is elongated and offset on the reflected
+  side. Chamfered 0.4 × 45° at both faces.
+- **two sandwich screws** at (−7.2, ±13.6): Ø2.9 clearance with Ø5.0 × 2.0
+  counterbores. Upper and lower holder halves screw together and clamp the
+  mirror (Ø24 × 3 mm on a Ø22 adhesive pad, per `MirrorDiam` /
+  `AdhesivePadDiam` in the master).
+
+Note the master model's fixed-mirror branch is **rolled back** (its live
+bodies are the kinematic-mount variant), so the released part's b-rep — not
+the master's current feature state — is the authority for these numbers.
+
+## 7. Parametric CAD layer (this repo + optikit-core)
+
+- `uc2v4/` (CadQuery). Square-insert family: `build_master_insert()` and
+  `build_lens_insert()` reproduce PRT-2123 / PRT-2027; round family:
+  `build_base_holder()` (the reusable blank) and `build_mirror_holder()`
+  reproduce the PRT-2111 lineage. Verified against the released STEPs by
+  `build_uc2v4.py` and `build_mirror_holder.py`. Everything is a dataclass
+  parameter: grid, shoulder, thickness, springs on/off, notch/nose count and
+  phase, hole pattern, `lens_diam`, thread, aperture shape…
+- `optikit-core` T3 generators, so optikit can emit correct-interface
+  holders directly into cube slots:
+  `openuc2.tpl.square_insert_v4` (lens block) and
+  `openuc2.tpl.round_holder_v4` (round base holder + parametric aperture).
+
+Measured agreement with the Inventor originals (mesh deviation, both
+directions, excluding the engraved labels):
+
+| part | volume Δ | p99 | max |
+| --- | --- | --- | --- |
+| PRT-2123 MASLCK | +0.14 % | 0.05–0.10 mm | 0.35 mm |
+| PRT-2027 INSLEND43F-50 | +0.51 % | 0.18 mm | 0.74 mm |
+| PRT-2111 MASINSMIRHOLUPP | +0.82 % | 0.045 mm | 0.05 mm |
+
+(the volume deltas are essentially the omitted engraving: for PRT-2111,
++39.1 mm³ against 36.0 mm³ of engraved recess.)
 
 ### Deliberate omissions of the CAD reconstruction
 
 - engraved label text (0.2 mm deep top-face labels on the master insert,
-  0.7 mm deep side-face labels on the lens insert; ≈ 60 mm³),
+  0.7 mm deep labels on the lens insert and the mirror holder),
 - r 0.5 blend fillets around the notch grooves and the 0.2 chamfer wrap at
-  their rims,
+  their rims; the r 0.1 nose-root fillet on the base holder (this is the
+  entire 0.05 mm residual on PRT-2111),
 - thread run-out feathering at the two coil ends,
 - sub-0.1 mm blend nuances where the corner rib meets the side face.
 
