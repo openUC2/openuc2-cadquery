@@ -682,12 +682,12 @@ if __name__ == "__main__":
         _cli()
     else: # call the generate function excplictly with parameters
         diameter = 25.4
-        thickness = 3.5
+        thickness = 5
         r1 = 51.5
         r2 = -51.5
         x = 2.0
         y = -1.0
-        z = 7.3
+        z = 5.3
         rx = 0.0
         ry = 0.0
         rz = 0.0
@@ -695,8 +695,8 @@ if __name__ == "__main__":
         stem = "lens_cartridge"
         aperture = None
         clearance = 0.15
-        extension_front = 0.0
-        extension_back = 0.0
+        extension_front = 3
+        extension_back = 3
         snap_to_notch = True
         alignment_pins = 2
 
