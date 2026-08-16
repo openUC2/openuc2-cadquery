@@ -210,6 +210,34 @@ Each half is engraved on its outward face with an identifying label
 (`D25.4 N4 F` by default: diameter, notch index, front/back). The text runs
 tangentially in the annulus between bore and rim, and shrinks to fit.
 
+**Depth is sized automatically.** `extension_front_mm` / `extension_back_mm`
+default to `None`, which sizes each half's outward extension to exactly what
+is needed to bury the lens with `min_wall_mm` behind it, rounded up to
+0.1 mm — no more guessing a value that "works but is thicker than necessary".
+
+**Getting the lens in.** A lens whose full-diameter rim straddles the joint
+plane can simply be laid into one half and capped by the other: at the joint
+the pocket is already the full lens diameter. But when the rim ends up wholly
+inside one half — which happens easily, since the reachable joint planes are
+only 5k ± 2 mm — that half becomes a **closed pocket with a mouth narrower
+than the lens**, and the assembly is physically impossible. The generator
+detects this from the rim's z-extent and responds with:
+
+- the seat half **bored open to the full lens diameter** from its rim face
+  right through to the joint plane, so the lens drops straight in;
+- the other half carrying a **stamp**: an annular plunger, inner Ø the clear
+  aperture, that reaches across the joint and presses the lens onto its seat.
+  Its contact face is cut by the lens cavity displaced `2 × clearance +
+  stamp_preload_mm` away from the joint — the lens comes to rest one
+  clearance down on its seat, so the stamp must reach twice that to touch it.
+
+Both the bore and the stamp are built in the lens' own frame and then posed,
+so a tilted lens gets a channel along *its* axis; clipping a tilted corridor
+with a z-slab leaves wedges of material exactly where the lens must travel.
+`check_lens_cartridge.py` verifies assembly directly by sliding the nominal
+lens along its axis out through the joint and checking that no holder
+material obstructs it.
+
 `check_lens_cartridge.py` verifies each generated pair: one solid per half,
 no half-to-half overlap, **zero collision between the nominal lens and the
 holder**, a pocket snug enough that an oversized lens interferes, the lens

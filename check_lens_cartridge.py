@@ -41,20 +41,24 @@ def load(name: str):
 lc = load("lens_cartridge")
 
 CASES = [
-    ("centred 1-inch biconvex",
+    ("centred 1-inch biconvex, auto extensions",
      lc.Lens(25.4, 3.5, 51.5, -51.5), lc.Pose(z_mm=0.0), lc.CartridgeParams()),
     ("offset in x/y, snapped to +5 notch",
      lc.Lens(12.7, 2.5, 25.8, -25.8), lc.Pose(x_mm=3.0, y_mm=-2.0, z_mm=6.1),
      lc.CartridgeParams()),
-    ("thick plano-convex, extended front",
-     lc.Lens(25.4, 6.0, 30.9, math.inf), lc.Pose(z_mm=-4.8),
-     lc.CartridgeParams(extension_front_mm=3.0, extension_back_mm=3.0)),
+    ("thick plano-convex",
+     lc.Lens(25.4, 6.0, 30.9, math.inf), lc.Pose(z_mm=-4.8), lc.CartridgeParams()),
     ("tilted 6 deg",
      lc.Lens(12.7, 3.0, math.inf, -25.0), lc.Pose(x_mm=1.5, z_mm=10.2, ry_deg=6.0),
-     lc.CartridgeParams(extension_front_mm=2.0, extension_back_mm=2.0)),
+     lc.CartridgeParams()),
     ("free slide (smooth master), exact z",
      lc.Lens(25.4, 3.5, 51.5, -51.5), lc.Pose(z_mm=7.3),
      lc.CartridgeParams(snap_to_notch=False)),
+    # The case Benedict hit: the lens lands wholly inside one half, so that
+    # half must be bored open and the other one must carry the stamp.
+    ("trapped lens -> bore + stamp",
+     lc.Lens(25.4, 5.0, 51.5, -51.5), lc.Pose(x_mm=2.0, y_mm=-1.0, z_mm=5.3),
+     lc.CartridgeParams()),
 ]
 
 
@@ -92,14 +96,21 @@ def check(name, lens, pose, params) -> bool:
           "OK" if overlap < 1e-6 else "FAIL")
     ok &= overlap < 1e-6
 
-    # nominal lens, posed exactly as asked, in the cartridge frame
+    # Nominal lens posed as asked. When a stamp is present the lens does not
+    # rest at the nominal spot — it is pushed onto its seat by one clearance,
+    # and the stamp deliberately reaches that far — so test it *seated*.
     nominal = lc._place(lc.lens_solid(lens, 0.0).val(), plan)
-    clash = 0.0
-    for half in (fs, bs):
-        clash += half.intersect(nominal).Volume()
-    print(f"  lens-vs-holder collision: {clash:.6f} mm^3",
-          "OK" if clash < 1e-6 else "FAIL")
-    ok &= clash < 1e-6
+    if plan.seat_half is None:
+        seated = nominal
+    else:
+        toward, _ = lc._seat_geometry(plan)
+        local = lc.lens_solid(lens, 0.0).val().translate(
+            cq.Vector(0, 0, -toward * params.fit_clearance_mm))
+        seated = lc._place(local, plan)
+    clash = sum(half.intersect(seated).Volume() for half in (fs, bs))
+    print(f"  seated lens vs holder collision: {clash:.6f} mm^3",
+          "OK" if clash < 1e-3 else "FAIL")
+    ok &= clash < 1e-3
 
     # Where did the lens' *reference point* end up in the cube frame? This is
     # what closes the loop notch + residual == request. (The centroid is not
@@ -131,6 +142,29 @@ def check(name, lens, pose, params) -> bool:
         print(f"  {label} envelope: r={r:.3f} <= {rmax:.3f}",
               "OK" if inside else "FAIL")
         ok &= inside
+
+    # Insertability: with the halves apart, the lens must be able to travel
+    # along its axis out through the joint plane. Its widest section sweeps a
+    # cylinder of the lens radius from the rim to the joint; if any holder
+    # material sits in that corridor the lens can never be got in.
+    # Built independently of the generator: actually slide the nominal lens
+    # along its own axis, out through the joint, and see whether any holder
+    # material stands in the way.
+    corridor = 0.0
+    if plan.seat_half is not None:
+        seat = fs if plan.seat_half == "front" else bs
+        toward, _ = lc._seat_geometry(plan)
+        travel = params.master_thickness_mm + lens.center_thickness_mm + 4.0
+        swept = None
+        for i in range(10):
+            step = toward * travel * i / 9.0
+            body = lc.lens_solid(lens, 0.0).val().translate(cq.Vector(0, 0, step))
+            body = lc._place(body, plan)
+            swept = body if swept is None else swept.fuse(body)
+        corridor = seat.intersect(swept).Volume()
+    print(f"  insertion corridor clear: {corridor:.6f} mm^3 obstructing",
+          "OK" if corridor < 1e-3 else "FAIL")
+    ok &= corridor < 1e-3
 
     # Orientation: the wide Ø40 cone ring must face the *joint*, because the
     # two master inserts mate flipped and each printed half is trapped by its

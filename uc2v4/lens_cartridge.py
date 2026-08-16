@@ -156,8 +156,10 @@ class CartridgeParams:
     # the same side the nose caps sit on — because that is the only direction
     # a half can grow: inward is the other half, and the seating cone must
     # stay untouched. This is the "skirt / support" of the hand sketch.
-    extension_front_mm: float = 0.0
-    extension_back_mm: float = 0.0
+    # None (the default) sizes each side automatically: just deep enough to
+    # bury the lens with ``min_wall_mm`` of material behind it, and no deeper.
+    extension_front_mm: float | None = None
+    extension_back_mm: float | None = None
     fit_clearance_mm: float = 0.15       # gap all around the lens (print fit)
     rim_mm: float = 1.5                  # radial overlap that actually holds it
     clear_aperture_mm: float | None = None   # default: diameter - 2*rim
@@ -172,6 +174,15 @@ class CartridgeParams:
     # mid-plane and the joint plane lands half an insert away from it.
     # "auto" picks whichever side gets the lens closer to its target.
     notched_half: str = "auto"           # "auto" | "back" | "front"
+
+    # When the lens ends up wholly inside one half, that half becomes a closed
+    # pocket with a mouth narrower than the lens — impossible to assemble. The
+    # fix is to bore that half open to the full lens diameter all the way to
+    # the joint, and to let the *other* half carry a stamp that reaches through
+    # and presses the lens onto its seat.
+    stamp: bool = True
+    stamp_wall_clearance_mm: float = 0.2   # radial gap stamp-to-bore
+    stamp_preload_mm: float = 0.0          # >0 = interference, printed part flexes
 
     alignment_pins: int = 2              # 0 disables
     pin_boss_on: str = "back"            # which half grows the bosses
@@ -218,6 +229,10 @@ class CartridgePlan:
     joint_z_mm: float = 0.0
     notched_half: str = "back"
     residual_mm: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    extension_front_mm: float = 0.0      # resolved (auto or as given)
+    extension_back_mm: float = 0.0
+    seat_half: str | None = None         # half the lens is trapped in, if any
+    rim_z_mm: tuple[float, float] = (0.0, 0.0)
     clear_aperture_mm: float = 0.0
     usable_radius_mm: float = 0.0
     z_range_mm: tuple[float, float] = (0.0, 0.0)
@@ -237,6 +252,12 @@ class CartridgePlan:
             "edge_thickness_mm": round(self.lens.edge_thickness_mm, 4),
             "clear_aperture_mm": round(self.clear_aperture_mm, 4),
             "cartridge_z_range_mm": [round(v, 4) for v in self.z_range_mm],
+            "extension_mm": {"front": round(self.extension_front_mm, 3),
+                             "back": round(self.extension_back_mm, 3)},
+            "lens_rim_z_mm": [round(v, 4) for v in self.rim_z_mm],
+            "seat_half": self.seat_half,
+            "stamp_half": (None if self.seat_half is None
+                           else ("back" if self.seat_half == "front" else "front")),
             "usable_radius_mm": round(self.usable_radius_mm, 4),
             "warnings": self.warnings,
         }
@@ -299,9 +320,50 @@ def plan_cartridge(lens: Lens, pose: Pose,
             f"lens diameter {lens.diameter_mm} mm")
     plan.clear_aperture_mm = aperture
 
-    plan.z_range_mm = (-(t + params.extension_back_mm), t + params.extension_front_mm)
+    z_lo, z_hi, rim_lo, rim_hi = _axial_reach(plan)
+    plan.rim_z_mm = (rim_lo, rim_hi)
+
+    # Auto-size each half: deep enough to bury the lens with min_wall behind
+    # it, and not a millimetre more.
+    def resolve(given, reach):
+        if given is not None:
+            return float(given)
+        need = reach + params.min_wall_mm - t
+        return math.ceil(max(need, 0.0) * 10.0) / 10.0
+    plan.extension_back_mm = resolve(params.extension_back_mm, -z_lo)
+    plan.extension_front_mm = resolve(params.extension_front_mm, z_hi)
+    plan.z_range_mm = (-(t + plan.extension_back_mm), t + plan.extension_front_mm)
+
+    # A lens whose full-diameter rim clears the joint plane can simply be laid
+    # into one half and capped by the other. If the rim sits entirely on one
+    # side, that half is a closed pocket with a mouth narrower than the lens —
+    # it needs boring open, and the other half needs a stamp.
+    if params.stamp:
+        if rim_lo > 0.0:
+            plan.seat_half = "front"
+        elif rim_hi < 0.0:
+            plan.seat_half = "back"
+
     _check_fit(plan)
     return plan
+
+
+def _axial_reach(plan: CartridgePlan):
+    """(z_lo, z_hi, rim_lo, rim_hi) of the lens cavity in the cartridge frame.
+
+    ``rim_*`` bracket the full-diameter edge band — the part that decides
+    whether the lens can be dropped in past the joint plane.
+    """
+    lens, params = plan.lens, plan.params
+    _, _, dz = plan.residual_mm
+    zv1, zv2 = lens.vertices()
+    s1, s2 = lens.sag(lens.r1_mm), lens.sag(lens.r2_mm)
+    tilt = math.radians(max(abs(plan.pose.rx_deg), abs(plan.pose.ry_deg)))
+    infl = lens.semi_diameter * math.sin(tilt) + params.fit_clearance_mm
+    return (dz + min(zv1, zv1 + s1) - infl,
+            dz + max(zv2, zv2 + s2) + infl,
+            dz + (zv1 + s1) - infl,
+            dz + (zv2 + s2) + infl)
 
 
 def available_radius(seat: BaseHolderInterface, z_from_joint: float) -> float:
@@ -355,13 +417,16 @@ def _check_fit(plan: CartridgePlan) -> None:
             f"lens reaches z={dz + half_extent:.2f} mm, within {params.min_wall_mm} mm "
             f"of the front face at {hi:.2f} mm — raise extension_front_mm")
 
-    grip = min(dz + half_extent, hi) - max(dz - half_extent, lo)
-    if dz - half_extent > 0 or dz + half_extent < 0:
+    if plan.seat_half is not None:
+        other = "back" if plan.seat_half == "front" else "front"
         plan.warnings.append(
-            "the lens lies entirely on one side of the joint plane; that half "
-            "does all the holding and the other is only a spacer")
-    elif grip <= 0:
-        plan.warnings.append("lens does not intersect the cartridge volume")
+            f"lens rim lies wholly in the {plan.seat_half} half — that half is "
+            f"bored to the full lens diameter so the lens can be dropped in, "
+            f"and the {other} half carries a stamp that presses it onto its seat")
+    elif not params.stamp and (dz - half_extent > 0 or dz + half_extent < 0):
+        plan.warnings.append(
+            "the lens lies entirely on one side of the joint plane and stamp=False "
+            "— it cannot be assembled")
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +478,7 @@ def lens_solid(lens: Lens, clearance: float = 0.0) -> cq.Workplane:
     return wp.close().revolve(360.0, (0, 0, 0), (0, 1, 0))
 
 
-def _place(shape, plan: CartridgePlan):
+def _place(shape, plan: CartridgePlan, extra_shift: tuple = (0.0, 0.0, 0.0)):
     """Rotate a shape about the lens reference point, then move it into place."""
     dx, dy, dz = plan.residual_mm
     p = plan.pose
@@ -422,7 +487,30 @@ def _place(shape, plan: CartridgePlan):
                         (p.rz_deg, (0, 0, 1))):
         if angle:
             s = s.rotate(cq.Vector(0, 0, 0), cq.Vector(*axis), angle)
-    return s.translate(cq.Vector(dx, dy, dz))
+    return s.translate(cq.Vector(dx + extra_shift[0], dy + extra_shift[1],
+                                 dz + extra_shift[2]))
+
+
+def lens_axis(plan: CartridgePlan) -> cq.Vector:
+    """Unit vector along the lens' optical axis after the pose rotations.
+
+    Mirrors ``_place``'s rotation order exactly (Rodrigues per axis), so the
+    insertion channel and the stamp stay aligned with the tilted lens.
+    """
+    p = plan.pose
+    v = [0.0, 0.0, 1.0]
+    for angle, axis in ((p.rx_deg, (1.0, 0.0, 0.0)), (p.ry_deg, (0.0, 1.0, 0.0)),
+                        (p.rz_deg, (0.0, 0.0, 1.0))):
+        if not angle:
+            continue
+        a = math.radians(angle)
+        u = axis
+        cross = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2],
+                 u[0] * v[1] - u[1] * v[0])
+        dot = sum(ui * vi for ui, vi in zip(u, v))
+        ca, sa = math.cos(a), math.sin(a)
+        v = [v[i] * ca + cross[i] * sa + u[i] * dot * (1.0 - ca) for i in range(3)]
+    return cq.Vector(*v)
 
 
 def _cavity(plan: CartridgePlan) -> cq.Workplane:
@@ -437,6 +525,100 @@ def _cavity(plan: CartridgePlan) -> cq.Workplane:
 
     return (cq.Workplane("XY").add(_place(pocket, plan))
             .union(cq.Workplane("XY").add(_place(bore, plan))))
+
+
+def _seat_geometry(plan: CartridgePlan):
+    """(toward_joint, local z of the rim face nearest the joint).
+
+    Everything about the insertion channel is built in the lens' own frame and
+    then posed, so a tilted lens gets a channel along *its* axis rather than a
+    z-aligned one — clipping a tilted corridor with a z-slab leaves wedges of
+    material exactly where the lens has to travel.
+    """
+    lens, c = plan.lens, plan.params.fit_clearance_mm
+    zv1, zv2 = lens.vertices()
+    if plan.seat_half == "front":       # lens sits at +z, joint is at -local z
+        return -1.0, zv1 + lens.sag(lens.r1_mm) - c
+    return +1.0, zv2 + lens.sag(lens.r2_mm) + c
+
+
+def _axis_cylinder(plan: CartridgePlan, radius: float, local_z0: float,
+                   length: float, direction: float) -> cq.Shape:
+    """Cylinder of *radius* along the lens axis, from local *local_z0*,
+    running *length* in *direction* (+1 = local +z), then posed."""
+    z_start = local_z0 if direction > 0 else local_z0 - length
+    cyl = cq.Solid.makeCylinder(radius, length, pnt=cq.Vector(0, 0, z_start),
+                                dir=cq.Vector(0, 0, 1))
+    return _place(cyl, plan)
+
+
+def _joint_halfspace(plan: CartridgePlan) -> cq.Solid:
+    """Big box covering the seat half's side of the joint plane."""
+    big = 200.0
+    z0 = 0.0 if plan.seat_half == "front" else -big
+    return cq.Solid.makeBox(big, big, big, pnt=cq.Vector(-big / 2, -big / 2, z0))
+
+
+def _insertion_bore(plan: CartridgePlan) -> cq.Workplane | None:
+    """Open the seat half to the full lens diameter, rim face to joint plane.
+
+    Between the rim's two faces the cavity is already a Ø(lens+clearance)
+    cylinder, so this channel plus the cavity is a clear straight path for the
+    lens to be pushed in from the joint side.
+    """
+    if plan.seat_half is None:
+        return None
+    p = plan.params
+    r = plan.lens.semi_diameter + p.fit_clearance_mm
+    toward, local_rim = _seat_geometry(plan)
+    length = (p.master_thickness_mm + plan.extension_front_mm
+              + plan.extension_back_mm + plan.lens.diameter_mm) * 3.0
+    cyl = _axis_cylinder(plan, r, local_rim, length, toward)
+    bore = cyl.intersect(_joint_halfspace(plan))
+    if bore.Volume() < 1e-9:
+        return None
+    return cq.Workplane("XY").add(bore)
+
+
+def _stamp_solid(plan: CartridgePlan) -> cq.Workplane | None:
+    """The plunger that reaches across the joint and seats the lens.
+
+    Its face is cut by the lens cavity displaced ``2*clearance + preload``
+    away from the joint. The lens comes to rest on its seat — i.e. displaced
+    by one clearance — so the stamp has to reach twice that to touch it, plus
+    ``stamp_preload_mm`` to actually squeeze.
+    """
+    if plan.seat_half is None:
+        return None
+    p = plan.params
+    lens = plan.lens
+    toward, local_rim = _seat_geometry(plan)
+    shift = -toward * (2.0 * p.fit_clearance_mm + p.stamp_preload_mm)
+
+    r_out = lens.semi_diameter + p.fit_clearance_mm - p.stamp_wall_clearance_mm
+    if r_out <= plan.clear_aperture_mm / 2.0:
+        plan.warnings.append("no annulus left for a stamp; it was dropped")
+        return None
+
+    # From the shifted rim face, back toward (and past) the joint, then bounded
+    # to the cartridge so it cannot poke out of the stamp half's outer face.
+    span = (p.master_thickness_mm + plan.extension_front_mm
+            + plan.extension_back_mm + lens.diameter_mm) * 3.0
+    cyl = _axis_cylinder(plan, r_out, local_rim + shift, span, toward)
+    lo, hi = plan.z_range_mm
+    bounds = cq.Solid.makeBox(200, 200, hi - lo, pnt=cq.Vector(-100, -100, lo))
+    stamp = cyl.intersect(bounds)
+
+    cutter_local = lens_solid(lens, p.fit_clearance_mm).val().translate(
+        cq.Vector(0, 0, shift))
+    stamp = stamp.cut(_place(cutter_local, plan))
+    stamp = stamp.cut(_place(cq.Solid.makeCylinder(
+        plan.clear_aperture_mm / 2.0, 400.0,
+        pnt=cq.Vector(0, 0, -200.0), dir=cq.Vector(0, 0, 1)), plan))
+    if stamp.Volume() < 1e-6:
+        plan.warnings.append("the stamp came out empty and was dropped")
+        return None
+    return cq.Workplane("XY").add(stamp)
 
 
 def _pin_angles(plan: CartridgePlan) -> list[float]:
@@ -555,13 +737,28 @@ def build_cartridge(plan: CartridgePlan) -> tuple[cq.Workplane, cq.Workplane]:
     p = plan.params
     t = p.master_thickness_mm
 
-    front = _half_blank(plan, p.extension_front_mm)          # spans [0, t+ext]
+    front = _half_blank(plan, plan.extension_front_mm)        # spans [0, t+ext]
     back = cq.Workplane("XY").add(
-        _half_blank(plan, p.extension_back_mm).val().mirror("XY"))   # [-t-ext, 0]
+        _half_blank(plan, plan.extension_back_mm).val().mirror("XY"))  # [-t-ext, 0]
 
     cavity = _cavity(plan)      # generate the lens pocket and the clear-aperture bore, already posed
     front = front.cut(cavity)   # subtract the lens pocket and the clear-aperture bore from both halves
     back = back.cut(cavity)     # subtract the lens pocket and the clear-aperture bore from both halves
+
+    # Bore the trapped half open to the full lens diameter, then let the other
+    # half reach across the joint and clamp the lens onto its seat.
+    bore = _insertion_bore(plan)
+    if bore is not None:
+        if plan.seat_half == "front":
+            front = front.cut(bore)
+        else:
+            back = back.cut(bore)
+    stamp = _stamp_solid(plan)
+    if stamp is not None:
+        if plan.seat_half == "front":
+            back = back.union(stamp)
+        else:
+            front = front.union(stamp)
 
     angles = _pin_angles(plan)
     if angles:
@@ -575,9 +772,9 @@ def build_cartridge(plan: CartridgePlan) -> tuple[cq.Workplane, cq.Workplane]:
         front, back = (sockets, bosses) if boss_on_back else (bosses, sockets)
 
     front = _engrave(front, plan, p.label or _auto_label(plan, "front"),
-                     t + p.extension_front_mm, outward=+1)
+                     t + plan.extension_front_mm, outward=+1)
     back = _engrave(back, plan, p.label or _auto_label(plan, "back"),
-                    -(t + p.extension_back_mm), outward=-1)
+                    -(t + plan.extension_back_mm), outward=-1)
 
     front, back = front.clean(), back.clean()
     for name, half in (("front", front), ("back", back)):
@@ -647,8 +844,10 @@ def _cli() -> None:
     ap.add_argument("--rz", type=float, default=0.0)
     ap.add_argument("--aperture", type=float, default=None, help="clear aperture Ø")
     ap.add_argument("--clearance", type=float, default=0.15)
-    ap.add_argument("--extension-front", type=float, default=0.0)
-    ap.add_argument("--extension-back", type=float, default=0.0)
+    ap.add_argument("--extension-front", type=float, default=None,
+                    help="auto-sized when omitted")
+    ap.add_argument("--extension-back", type=float, default=None,
+                    help="auto-sized when omitted")
     ap.add_argument("--no-snap", action="store_true",
                     help="smooth master insert: place the joint exactly on z")
     ap.add_argument("--no-pins", action="store_true")
@@ -695,8 +894,8 @@ if __name__ == "__main__":
         stem = "lens_cartridge"
         aperture = None
         clearance = 0.15
-        extension_front = 3
-        extension_back = 3
+        extension_front = None      # None -> sized automatically from the lens
+        extension_back = None
         snap_to_notch = True
         alignment_pins = 2
 
@@ -711,4 +910,6 @@ if __name__ == "__main__":
                                  snap_to_notch=snap_to_notch,
                                  alignment_pins=alignment_pins)
         plan = generate(lens, pose, out_dir, params=params, stem=stem)
-        # export as stl
+        # generate() already wrote <stem>_front/_back .step and .stl, the plan
+        # JSON and the layout diagram into out_dir.
+        print(json.dumps(plan.report(), indent=2))

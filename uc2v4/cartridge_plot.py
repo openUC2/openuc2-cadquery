@@ -27,6 +27,7 @@ CAVITY = "#ffffff"
 MASTER_NOTCHED = "#8e44ad"      # purple, as in the Inventor assembly
 MASTER_PLAIN = "#d35400"        # orange
 PRINTED = "#b0bec5"
+STAMP = "#e8a87c"
 GLASS = "#a8d5e5"
 INK = "#12303d"
 
@@ -83,9 +84,9 @@ def plot_plan(plan, out_path: str | Path, show_axis_labels: bool = True):
                                  facecolor=CAVITY, edgecolor=INK, lw=0.8))
     if plan.notch_index >= 0:
         ax.axvline(plan.notch_z_mm, color="#c0392b", lw=1.1, ls="--", zorder=1)
-        ax.annotate(f"notch {plan.notch_index} @ {plan.notch_z_mm:+.0f}",
-                    (plan.notch_z_mm, -clear - 1.0), color="#c0392b",
-                    ha="center", va="top", fontsize=9)
+        ax.annotate(f"notch {plan.notch_index} @ {plan.notch_z_mm:+.0f} mm",
+                    (plan.notch_z_mm, half + 0.8), color="#c0392b",
+                    ha="center", va="bottom", fontsize=9)
 
     j = plan.joint_z_mm
     seat = p.seat()
@@ -103,7 +104,8 @@ def plot_plan(plan, out_path: str | Path, show_axis_labels: bool = True):
                                  facecolor=colour, edgecolor=INK, lw=0.9))
 
     # Printed halves: wide cone ring on the joint, narrowing outward.
-    for sign, ext in ((+1, p.extension_front_mm), (-1, p.extension_back_mm)):
+    # The resolved extensions live on the plan; the params may still say None.
+    for sign, ext in ((+1, plan.extension_front_mm), (-1, plan.extension_back_mm)):
         z_knee = j + sign * t
         z_out = j + sign * (t + ext)
         for s in (+1, -1):
@@ -115,11 +117,28 @@ def plot_plan(plan, out_path: str | Path, show_axis_labels: bool = True):
                                  alpha=0.95, zorder=2))
     ax.plot([j, j], [-r_wide, r_wide], color=INK, lw=1.4, zorder=3)
 
+    # Insertion channel + stamp, when the lens is trapped in one half.
+    if plan.seat_half is not None:
+        h = lens.semi_diameter + p.fit_clearance_mm
+        rim_lo, rim_hi = plan.rim_z_mm
+        z_a, z_b = ((j, j + rim_lo) if plan.seat_half == "front"
+                    else (j + rim_hi, j))
+        for s in (+1, -1):
+            ax.add_patch(Rectangle((min(z_a, z_b), 0.0), abs(z_b - z_a), s * h,
+                                   facecolor="white", edgecolor="#c0392b",
+                                   lw=1.0, ls="--", zorder=3))
+        r_st = h - p.stamp_wall_clearance_mm
+        r_ap = plan.clear_aperture_mm / 2.0
+        for s in (+1, -1):
+            ax.add_patch(Rectangle((min(z_a, z_b), s * r_ap), abs(z_b - z_a),
+                                   s * (r_st - r_ap), facecolor=STAMP,
+                                   edgecolor=INK, lw=0.9, hatch="///", zorder=4))
+
     outline = _lens_outline(lens)
     outline = _rot(outline, plan.pose.ry_deg, 0.0, 0.0)
     outline = [(z + plan.pose.z_mm, y + plan.pose.y_mm) for z, y in outline]
     ax.add_patch(Polygon(outline, facecolor=GLASS, edgecolor="#2c7ea1", lw=1.3,
-                         zorder=4))
+                         zorder=5))
 
     ax.plot([-half, half], [plan.pose.y_mm] * 2, color="#c0392b", lw=0.8,
             ls=":", zorder=5)
@@ -142,6 +161,14 @@ def plot_plan(plan, out_path: str | Path, show_axis_labels: bool = True):
                   label="printed halves — wide cone ring on the joint"),
         Rectangle((0, 0), 1, 1, facecolor=GLASS, edgecolor="#2c7ea1", label="lens"),
     ]
+    if plan.seat_half is not None:
+        other = "back" if plan.seat_half == "front" else "front"
+        handles += [
+            Rectangle((0, 0), 1, 1, facecolor="white", edgecolor="#c0392b", ls="--",
+                      label=f"{plan.seat_half} half bored open to Ø lens"),
+            Rectangle((0, 0), 1, 1, facecolor=STAMP, edgecolor=INK, hatch="///",
+                      label=f"stamp from the {other} half"),
+        ]
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.02),
               frameon=False, fontsize=8.5, ncol=2)
 
