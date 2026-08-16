@@ -178,11 +178,37 @@ target pose (x, y, z, rx, ry, rz) measured **from the cube centre**, it:
    face rather than on a flat shoulder;
 4. bores the clear aperture along the lens axis and adds keyed alignment pins,
    auto-clocked to miss the pocket;
-5. emits `*_front.step/.stl`, `*_back.step/.stl` and a `*_plan.json` recording
-   the notch index, the joint plane, the residual offsets and any warnings.
+5. emits `*_front.step/.stl`, `*_back.step/.stl`, a `*_plan.json` recording the
+   notch index, the joint plane, the residual offsets and any warnings, and a
+   `*_layout.png` schematic (`uc2v4/cartridge_plot.py`) showing the notch grid,
+   the chosen notch, the molded/printed sandwich and the lens in place.
 
 Both halves carry the full base-holder profile from §5, so they drop into the
 molded master inserts and index every 45°.
+
+**Which way round the halves go.** The two master inserts mate *flipped* —
+their self-mating screw pattern (§3) only works if one is rotated 180° about
+an in-plane axis. Rotating a cone that is wide at its bottom face about such
+an axis leaves it wide at the same plane, so **both cones end up wide on the
+joint and narrowing outward**. Each printed half is therefore dropped into
+its master insert from the joint side and trapped when the sandwich is
+screwed shut: the wide Ø40 ring faces *inward*. Consequences that follow
+from this and are easy to get backwards:
+
+- the nose caps sit on the **outward** end of each half;
+- any axial extension ("skirt / support") can only be added on that same
+  outward end — inward is the other half, and the seating cone must not be
+  touched;
+- the alignment pins straddle the joint plane, boss on one half and socket
+  on the other (`pin_boss_on`).
+
+`check_lens_cartridge.py` asserts the orientation explicitly — measuring the
+half's radius near the joint against its radius near the outward face —
+because a mirrored build still satisfies every other check.
+
+Each half is engraved on its outward face with an identifying label
+(`D25.4 N4 F` by default: diameter, notch index, front/back). The text runs
+tangentially in the annulus between bore and rim, and shrinks to fit.
 
 `check_lens_cartridge.py` verifies each generated pair: one solid per half,
 no half-to-half overlap, **zero collision between the nominal lens and the

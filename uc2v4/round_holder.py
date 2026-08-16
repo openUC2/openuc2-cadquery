@@ -123,12 +123,12 @@ def disk_blank(iface: BaseHolderInterface) -> cq.Workplane:
     top = (cr, iface.z_band_top)
     ch = min(iface.bottom_chamfer, iface.skirt)
 
-    wp = (
-        cq.Workplane("XZ")
-        .moveTo(0.0, iface.z_bottom)
-        .lineTo(iface.max_radius - ch, iface.z_bottom)
-        .lineTo(iface.max_radius, iface.z_bottom + ch)       # bottom chamfer
-    )
+    wp = cq.Workplane("XZ").moveTo(0.0, iface.z_bottom)
+    if ch > 1e-9:
+        wp = (wp.lineTo(iface.max_radius - ch, iface.z_bottom)
+                .lineTo(iface.max_radius, iface.z_bottom + ch))   # bottom chamfer
+    else:                                                          # flush face
+        wp = wp.lineTo(iface.max_radius, iface.z_bottom)
     if iface.z_band_bottom - (iface.z_bottom + ch) > 1e-9:   # straight extension
         wp = wp.lineTo(iface.max_radius, iface.z_band_bottom)
     wp = (

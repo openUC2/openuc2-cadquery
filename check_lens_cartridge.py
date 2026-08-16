@@ -66,6 +66,16 @@ def solid_of(wp: cq.Workplane) -> cq.Solid:
     return s
 
 
+def slice_radius(solid: cq.Solid, z: float, dz: float = 0.12) -> float:
+    """Outer radius of a thin slab of *solid* at height z (0 if no material)."""
+    box = cq.Solid.makeBox(80, 80, dz, pnt=cq.Vector(-40, -40, z - dz / 2.0))
+    cut = solid.intersect(box)
+    if cut.Volume() < 1e-9:
+        return 0.0
+    bb = cut.BoundingBox()
+    return max(abs(bb.xmin), abs(bb.xmax), abs(bb.ymin), abs(bb.ymax))
+
+
 def check(name, lens, pose, params) -> bool:
     print(f"=== {name}")
     plan = lc.plan_cartridge(lens, pose, params=params)
@@ -112,7 +122,7 @@ def check(name, lens, pose, params) -> bool:
           "OK" if grip > 1e-3 else "FAIL")
     ok &= grip > 1e-3
 
-    seat = params.seat(0.0, params.master_thickness_mm / 2.0)
+    seat = params.seat()
     rmax = seat.max_radius + 0.6          # noses stand ~0.45 proud of the cone
     for label, half in (("front", fs), ("back", bs)):
         bb = half.BoundingBox()
@@ -121,6 +131,19 @@ def check(name, lens, pose, params) -> bool:
         print(f"  {label} envelope: r={r:.3f} <= {rmax:.3f}",
               "OK" if inside else "FAIL")
         ok &= inside
+
+    # Orientation: the wide Ø40 cone ring must face the *joint*, because the
+    # two master inserts mate flipped and each printed half is trapped by its
+    # cone narrowing outward. Building these inside-out still passes every
+    # other check here, so test it explicitly.
+    t = params.master_thickness_mm
+    for label, half, sign in (("front", fs, +1.0), ("back", bs, -1.0)):
+        r_joint = slice_radius(half, sign * 0.30)
+        r_outer = slice_radius(half, sign * (t - 0.30))
+        good = r_joint > r_outer + 0.05
+        print(f"  {label} cone faces joint: r(joint)={r_joint:.3f} > "
+              f"r(outward)={r_outer:.3f}", "OK" if good else "FAIL")
+        ok &= good
 
     for w in plan.warnings:
         print(f"  note: {w}")
