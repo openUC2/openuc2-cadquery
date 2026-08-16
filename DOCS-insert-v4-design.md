@@ -138,7 +138,59 @@ Note the master model's fixed-mirror branch is **rolled back** (its live
 bodies are the kinematic-mount variant), so the released part's b-rep — not
 the master's current feature state — is the authority for these numbers.
 
-## 7. Parametric CAD layer (this repo + optikit-core)
+## 7. The cube's discrete grid (PRT-1003 CUBHLF111)
+
+Measured off the molded cube half:
+
+| feature | value |
+| --- | --- |
+| track walls (the insert's shoulder slides between them) | x = ±17.03 / −17.06, gap 34.09 mm (`CubeClearWidth` 34.0) |
+| **notches** | **7, pitch exactly 5.0 mm, at −15, −10, −5, 0, +5, +10, +15 mm from the cube centre** |
+| notch width along the travel axis | 1.88 mm |
+| notch band height | 3.44 mm |
+
+Only one pair of opposite walls is notched — the other pair is a single
+unbroken face, which is why an insert grips discretely on one axis and slides
+freely on the other.
+
+**Phase of the grid.** The locking tongue (MAS-2003 `Skizze37 --- for tongue`,
+suppressed in the sliding variants) is a triangular bump on the insert's
+shoulder wall, profile spanning z = −2…+2 with its tip at **z = 0** — i.e.
+centred on the master insert's own mid-plane. So a notch fixes *the notched
+insert's mid-plane*, and in a two-insert sandwich the joint plane lands half
+an insert (2 mm) to one side of the notch. Reachable joint planes are
+therefore 5k ± 2 mm, and the printed adapter has to absorb up to ±2 mm of
+axial residual — which it comfortably can inside an 8 mm sandwich.
+
+## 8. Automatic lens-cartridge generation
+
+`uc2v4/lens_cartridge.py` closes the loop from an optical prescription to two
+printable files. Given a lens (diameter, centre thickness, R1, R2) and a
+target pose (x, y, z, rx, ry, rz) measured **from the cube centre**, it:
+
+1. snaps z onto the notch grid above, choosing which half carries the tongue
+   so the lens lands as close as possible (`notched_half="auto"`);
+2. hands the entire remainder — the full transverse offset, the residual
+   axial offset, and the tilt — to the printed pair;
+3. cuts the lens cavity as a **true offset negative of the lens** (the sphere
+   offset is exact in the signed convention: R1 → R1 + c, R2 → R2 − c, with
+   the vertices moving apart by c), so a curved surface seats on its whole
+   face rather than on a flat shoulder;
+4. bores the clear aperture along the lens axis and adds keyed alignment pins,
+   auto-clocked to miss the pocket;
+5. emits `*_front.step/.stl`, `*_back.step/.stl` and a `*_plan.json` recording
+   the notch index, the joint plane, the residual offsets and any warnings.
+
+Both halves carry the full base-holder profile from §5, so they drop into the
+molded master inserts and index every 45°.
+
+`check_lens_cartridge.py` verifies each generated pair: one solid per half,
+no half-to-half overlap, **zero collision between the nominal lens and the
+holder**, a pocket snug enough that an oversized lens interferes, the lens
+reference point landing on the requested cube coordinate, and both halves
+staying inside the base-holder envelope.
+
+## 9. Parametric CAD layer (this repo + optikit-core)
 
 - `uc2v4/` (CadQuery). Square-insert family: `build_master_insert()` and
   `build_lens_insert()` reproduce PRT-2123 / PRT-2027; round family:

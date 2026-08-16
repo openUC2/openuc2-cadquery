@@ -31,6 +31,21 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > against `extracted/*.step`. Design write-up: [`DOCS-insert-v4-design.md`](DOCS-insert-v4-design.md).
 > Both families are available to optikit-core as standalone T3 generators
 > (`openuc2.tpl.square_insert_v4`, `openuc2.tpl.round_holder_v4`).
+
+> **Automatic lens cartridges — `uc2v4/lens_cartridge.py`.**
+> Give it a lens and a target pose measured from the cube centre; it snaps to
+> the cube's notch grid (7 notches, 5.0 mm pitch, measured from
+> `PRT - 1003 - CUBHLF111`), hands the residual offset and tilt to the printed
+> parts, and writes the **front and back** round inserts that clamp the lens
+> and drop into the molded master inserts:
+>
+> ```bash
+> uv run --with cadquery python uc2v4/lens_cartridge.py --diameter 25.4 --thickness 3.5 --r1 51.5 --r2 -51.5 -x 3.0 -y -2.0 -z 6.1 --extension-front 1.5 --extension-back 1.5
+> ```
+>
+> `check_lens_cartridge.py` verifies a generated pair (one solid per half, no
+> overlap, zero lens-to-holder collision, snug pocket, pose reproduced,
+> envelope respected).
 >
 > The scripts below predate the extraction and approximate the outline from
 > drawings — still useful as simple starting points, but `uc2v4/` is the

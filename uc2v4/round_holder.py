@@ -110,19 +110,29 @@ def _arc_mid(start, end, center, radius):
 
 
 def disk_blank(iface: BaseHolderInterface) -> cq.Workplane:
-    """The conic disk without noses, as a revolve of its exact (r, z) profile."""
+    """The conic disk without noses, as a revolve of its exact (r, z) profile.
+
+    When ``skirt`` exceeds ``bottom_chamfer`` the extra length becomes a
+    straight cylindrical run at ``max_radius`` below the band — that is how a
+    holder gains axial room without disturbing the mating cone.
+    """
     a, fr = iface.half_angle_rad, iface.top_fillet
     cz = iface.z_band_top - fr
     cr = iface.top_face_radius
     tangent = (cr + fr * math.cos(a), cz + fr * math.sin(a))
     top = (cr, iface.z_band_top)
+    ch = min(iface.bottom_chamfer, iface.skirt)
 
     wp = (
         cq.Workplane("XZ")
         .moveTo(0.0, iface.z_bottom)
-        .lineTo(iface.max_radius - iface.bottom_chamfer, iface.z_bottom)
-        .lineTo(iface.max_radius, iface.z_band_bottom)      # bottom chamfer
-        .lineTo(*tangent)                                    # the 82 deg wall
+        .lineTo(iface.max_radius - ch, iface.z_bottom)
+        .lineTo(iface.max_radius, iface.z_bottom + ch)       # bottom chamfer
+    )
+    if iface.z_band_bottom - (iface.z_bottom + ch) > 1e-9:   # straight extension
+        wp = wp.lineTo(iface.max_radius, iface.z_band_bottom)
+    wp = (
+        wp.lineTo(*tangent)                                  # the 82 deg wall
         .threePointArc(_arc_mid(tangent, top, (cr, cz), fr), top)
         .lineTo(0.0, iface.z_band_top)
         .close()
