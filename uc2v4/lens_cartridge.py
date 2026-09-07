@@ -902,39 +902,4 @@ def _cli(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    if 0:
-        _cli()
-    else: # call the generate function excplictly with parameters
-        diameter = 25.4
-        thickness = 15
-        r1 = 51.5
-        r2 = -51.5
-        x = 2.0
-        y = -1.0
-        z = 5.3
-        rx = 0.0
-        ry = 0.0
-        rz = 0.0
-        out_dir = "generated"
-        stem = "lens_cartridge"
-        aperture = None
-        clearance = 0.15
-        extension_front = None      # None -> sized automatically from the lens
-        extension_back = None
-        snap_to_notch = True
-        alignment_pins = 2
-
-        lens = Lens(diameter_mm=diameter, center_thickness_mm=thickness,
-                    r1_mm=r1, r2_mm=r2, reference="center")
-        pose = Pose(x_mm=x, y_mm=y, z_mm=z,
-                    rx_deg=rx, ry_deg=ry, rz_deg=rz)
-        params = CartridgeParams(clear_aperture_mm=aperture,
-                                 fit_clearance_mm=clearance,
-                                 extension_front_mm=extension_front,
-                                 extension_back_mm=extension_back,
-                                 snap_to_notch=snap_to_notch,
-                                 alignment_pins=alignment_pins)
-        plan = generate(lens, pose, out_dir, params=params, stem=stem)
-        # generate() already wrote <stem>_front/_back .step and .stl, the plan
-        # JSON and the layout diagram into out_dir.
-        print(json.dumps(plan.report(), indent=2))
+    _cli()

@@ -1,6 +1,6 @@
 [project]
 name = "openuc2-cadquery"
-version = "0.1.0"
+version = "0.2.0"
 description = "Parametric CadQuery models of the openUC2 V4 inserts, and the printable lens cartridge that holds an optic at an arbitrary pose inside a cube"
 readme = "README.md"
 requires-python = ">=3.10"

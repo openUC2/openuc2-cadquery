@@ -26,9 +26,9 @@ from dataclasses import dataclass, replace
 import cadquery as cq
 
 try:                                    # works as a package and as a loose script
-    from .interface import SquareInsertInterface
+    from .interface import SquareInsertInterface, base_plate
 except ImportError:                     # pragma: no cover
-    from interface import SquareInsertInterface
+    from interface import SquareInsertInterface, base_plate
 
 
 @dataclass(frozen=True)
@@ -154,13 +154,9 @@ def build_lens_insert(params: LensInsertParams | None = None) -> cq.Workplane:
                 f"thread starts at z={thread_bot:.2f}, below the lead-in cone "
                 f"{cone_top_z:.2f}; raise thread_start_z")
 
-    from interface import base_plate  # local import to avoid cycle noise
-
-    part = base_plate(p.interface, p.thickness)
-    if 0: 
-        part = part.cut(_cavity_cut(p))
-        if p.thread:
-            part = part.union(_thread_solid(p))
+    part = base_plate(p.interface, p.thickness).cut(_cavity_cut(p))
+    if p.thread:
+        part = part.union(_thread_solid(p))
     return part.clean()
 
 

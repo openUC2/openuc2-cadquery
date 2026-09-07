@@ -19,8 +19,12 @@ import time
 from pathlib import Path
 
 import cadquery as cq
-import numpy as np
-import trimesh
+
+try:
+    import numpy as np
+    import trimesh
+except ImportError:  # pip install '.[verify]'; --no-verify builds without them
+    np = trimesh = None
 
 from uc2v4 import build_lens_insert, build_master_insert
 
@@ -104,9 +108,16 @@ def report(name: str, mine: cq.Workplane, gt_path: Path) -> None:
     cluster_report(pts_b, d_b, 0.1, "gt->mine > 0.1")
 
 
+def _require_verify_deps() -> None:
+    if trimesh is None or np is None:
+        sys.exit("verification needs trimesh/rtree/scipy: pip install '.[verify]' (or pass --no-verify)")
+
+
 def main() -> None:
     OUT.mkdir(exist_ok=True)
     verify = "--no-verify" not in sys.argv
+    if verify:
+        _require_verify_deps()
 
     for name, builder in (("uc2v4_master_insert", build_master_insert),
                           ("uc2v4_lens_insert", build_lens_insert)):
@@ -117,7 +128,9 @@ def main() -> None:
         cq.exporters.export(part, str(OUT / f"{name}.step"))
         cq.exporters.export(part, str(OUT / f"{name}.stl"), tolerance=0.02)
         print(f"  wrote {OUT / (name + '.step')}")
-        if verify and GT[name].exists():
+        if verify:
+            if not GT[name].exists():
+                sys.exit(f"ground truth missing: {GT[name]}\n(pass --no-verify to build without checking)")
             report(name, part, GT[name])
 
 

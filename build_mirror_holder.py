@@ -19,8 +19,12 @@ import time
 from pathlib import Path
 
 import cadquery as cq
-import numpy as np
-import trimesh
+
+try:
+    import numpy as np
+    import trimesh
+except ImportError:  # pip install '.[verify]'; --no-verify builds without them
+    np = trimesh = None
 
 HERE = Path(__file__).parent
 OUT = HERE / "generated"
@@ -101,6 +105,11 @@ def report(mine: cq.Workplane, gt_path: Path) -> None:
     cluster_report(pts_b, d_b, 0.1, "gt->mine > 0.1")
 
 
+def _require_verify_deps() -> None:
+    if trimesh is None or np is None:
+        sys.exit("verification needs trimesh/rtree/scipy: pip install '.[verify]' (or pass --no-verify)")
+
+
 def main() -> None:
     OUT.mkdir(exist_ok=True)
     rh = load_round_holder()
@@ -118,9 +127,13 @@ def main() -> None:
     cq.exporters.export(blank, str(OUT / "uc2v4_base_holder.stl"), tolerance=0.02)
     print(f"  blank volume {blank.val().Volume():.2f} mm^3")
 
-    if "--no-verify" not in sys.argv and GT.exists():
-        print("=== verification")
-        report(part, GT)
+    if "--no-verify" in sys.argv:
+        return
+    _require_verify_deps()
+    if not GT.exists():
+        sys.exit(f"ground truth missing: {GT}\n(pass --no-verify to build without checking)")
+    print("=== verification")
+    report(part, GT)
 
 
 if __name__ == "__main__":
