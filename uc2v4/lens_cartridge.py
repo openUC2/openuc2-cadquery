@@ -823,7 +823,32 @@ def generate(lens: Lens, pose: Pose, out_dir: str | Path = "generated",
     return plan
 
 
-def _cli() -> None:
+def generate_lens_holder(pos_xyz: tuple[float, float, float],
+                         lens_params: "Lens | dict",
+                         out_dir: str | Path = "generated",
+                         tilt_deg: tuple[float, float, float] = (0.0, 0.0, 0.0),
+                         cube: CubeInterface | None = None,
+                         params: CartridgeParams | None = None,
+                         stem: str = "lens_cartridge",
+                         stl: bool = True,
+                         diagram: bool = True) -> CartridgePlan:
+    """One call from a pose to printable parts.
+
+    ``pos_xyz`` is the lens position from the cube centre (mm, optical
+    axis = Z); ``lens_params`` is a :class:`Lens` or a dict of its fields
+    (``diameter_mm``, ``center_thickness_mm``, ``r1_mm``, ``r2_mm``,
+    ``reference``). Writes front/back STEP (+STL), the plan JSON and the
+    layout diagram into ``out_dir`` and returns the plan.
+    """
+    lens = lens_params if isinstance(lens_params, Lens) else Lens(**dict(lens_params))
+    pose = Pose(x_mm=float(pos_xyz[0]), y_mm=float(pos_xyz[1]), z_mm=float(pos_xyz[2]),
+                rx_deg=float(tilt_deg[0]), ry_deg=float(tilt_deg[1]),
+                rz_deg=float(tilt_deg[2]))
+    return generate(lens, pose, out_dir, cube=cube, params=params,
+                    stem=stem, stl=stl, diagram=diagram)
+
+
+def _cli(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
         description="Generate the printable round insert pair that holds a lens "
                     "at a given pose inside an openUC2 V4 cube.")
@@ -856,7 +881,7 @@ def _cli() -> None:
     ap.add_argument("--no-diagram", action="store_true")
     ap.add_argument("--out-dir", default="generated")
     ap.add_argument("--stem", default="lens_cartridge")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     lens = Lens(diameter_mm=args.diameter, center_thickness_mm=args.thickness,
                 r1_mm=args.r1, r2_mm=args.r2, reference=args.reference)
@@ -881,7 +906,7 @@ if __name__ == "__main__":
         _cli()
     else: # call the generate function excplictly with parameters
         diameter = 25.4
-        thickness = 5
+        thickness = 15
         r1 = 51.5
         r2 = -51.5
         x = 2.0

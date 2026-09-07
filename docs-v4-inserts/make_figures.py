@@ -114,7 +114,7 @@ def fig_overview():
           "Three layers: the cube and the master inserts are always the same,\n"
           "only the small round insert changes with your optic")
     fig.tight_layout()
-    fig.savefig(OUT / "01-overview.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "01-overview.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -141,7 +141,7 @@ def fig_notches():
     _tidy(ax, (-34, 62), (-42, 40),
           "Inside the cube: a ladder of teeth along the beam direction")
     fig.tight_layout()
-    fig.savefig(OUT / "02-notches.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "02-notches.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -181,7 +181,7 @@ def fig_variants():
 
     fig.suptitle("The master insert comes in two flavours", fontsize=13.5, y=1.0)
     fig.tight_layout()
-    fig.savefig(OUT / "03-variants.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "03-variants.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -230,7 +230,7 @@ def fig_sandwich():
           "The sandwich: the optic is clamped between two printed inserts,\n"
           "which are held by the two molded master inserts")
     fig.tight_layout()
-    fig.savefig(OUT / "04-sandwich.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "04-sandwich.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -267,7 +267,7 @@ def fig_universal():
                  "the ring of 8 nubs lets it click in every 45°",
                  fontsize=13, y=1.02)
     fig.tight_layout()
-    fig.savefig(OUT / "05-universal.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "05-universal.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -297,7 +297,7 @@ def fig_coarse_fine():
           "Coarse + fine: the cube gives 5 mm steps, the printed insert\n"
           "makes up the difference — so any position is reachable")
     fig.tight_layout()
-    fig.savefig(OUT / "06-coarse-fine.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "06-coarse-fine.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -366,7 +366,7 @@ def fig_seat_stamp():
               "Won't work" if not good else "Works: open bore + push ring")
     fig.suptitle("When the optic ends up deep inside one half", fontsize=13.5, y=1.0)
     fig.tight_layout()
-    fig.savefig(OUT / "07-seat-stamp.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "07-seat-stamp.svg", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 

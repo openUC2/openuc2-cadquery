@@ -19,10 +19,28 @@ from .interface import (
     SpringTemplate,
 )
 from .lens_insert import LensInsertParams, build_lens_insert
+from .lens_cartridge import (
+    CartridgeParams,
+    CartridgePlan,
+    CubeInterface,
+    Lens,
+    Pose,
+    build_cartridge,
+    generate_lens_holder,
+    plan_cartridge,
+)
 from .master_insert import MasterInsertParams, build_master_insert
 
 __all__ = [
     "GRID_MM",
+    "Lens",
+    "Pose",
+    "CubeInterface",
+    "CartridgeParams",
+    "CartridgePlan",
+    "plan_cartridge",
+    "build_cartridge",
+    "generate_lens_holder",
     "SquareInsertInterface",
     "MasterInsertInterface",
     "SpringTemplate",

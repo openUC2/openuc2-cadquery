@@ -25,7 +25,10 @@ from dataclasses import dataclass, replace
 
 import cadquery as cq
 
-from interface import SquareInsertInterface
+try:                                    # works as a package and as a loose script
+    from .interface import SquareInsertInterface
+except ImportError:                     # pragma: no cover
+    from interface import SquareInsertInterface
 
 
 @dataclass(frozen=True)

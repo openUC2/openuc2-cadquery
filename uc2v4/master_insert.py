@@ -1,8 +1,15 @@
 """openUC2 V4 master insert (MAS - 2003 lineage).
 
-``build_master_insert()`` with default parameters reproduces
-PRT - 2123 - MASLCK - V04 - B ("Master lock", the *sliding* master-insert
-half): a 4 mm plate on the square-insert interface with
+``build_master_insert()`` reproduces both released parts, verified against
+their STEPs by ``tools/validate_master_inserts.py``:
+
+- the default (``corner_rib=False``) is PRT - 2100 - MASINS - V04, the
+  *sliding* insert: smooth ledges, held by friction;
+- ``corner_rib=True`` is PRT - 2123 - MASLCK - V04 ("Master lock"): the raised
+  rib on the ±X ledges drops into one of the cube's notches, so the insert
+  sits at a repeatable 5 mm position.
+
+Either is a 4 mm plate on the square-insert interface with
 
 - a conic center opening, wall angle 82 deg to the plate face
   (Ø40.0 at the bottom face, Ø38.876 at the top face, InsertDiam = 40),
@@ -30,7 +37,10 @@ from dataclasses import dataclass, replace
 
 import cadquery as cq
 
-from interface import MasterInsertInterface, base_plate
+try:                                    # works as a package and as a loose script
+    from .interface import MasterInsertInterface, base_plate
+except ImportError:                     # pragma: no cover
+    from interface import MasterInsertInterface, base_plate
 
 
 @dataclass(frozen=True)
@@ -61,10 +71,11 @@ class MasterInsertParams:
     pilot_depth_from_top: float = 3.5      # then a 45 deg relief cone breaks
     holes: bool = True                     # through the bottom face
 
-    # corner-ledge rib: a raised tongue at mid-height on the four +-X-side
-    # corner ledges that rides in the cube track's center groove (measured:
-    # crest at shoulder+0.8586, flat over z +-0.1414, 45 deg flanks down to
-    # the ledge at z +-1.0, plan end rounded r0.5 just before the side face)
+    # corner-ledge rib: the LOCKING feature (PRT-2123 MASLCK) — a raised
+    # tongue at mid-height on the four +-X-side corner ledges that drops into
+    # the cube track's notches (measured: crest at shoulder+0.8586, flat over
+    # z +-0.1414, 45 deg flanks down to the ledge at z +-1.0, plan end rounded
+    # r0.5 just before the side face). Off = the sliding PRT-2100 MASINS.
     corner_rib: bool = False
     rib_height: float = 0.8586
     rib_flat_half_z: float = 0.1414

@@ -1,0 +1,44 @@
+{
+  "lens": {
+    "diameter_mm": 25.4,
+    "center_thickness_mm": 15,
+    "r1_mm": 51.5,
+    "r2_mm": -51.5,
+    "reference": "center"
+  },
+  "requested_pose": {
+    "x_mm": 2.0,
+    "y_mm": -1.0,
+    "z_mm": 5.3,
+    "rx_deg": 0.0,
+    "ry_deg": 0.0,
+    "rz_deg": 0.0
+  },
+  "notch_index": 4,
+  "notch_z_mm": 5.0,
+  "notched_half": "back",
+  "joint_z_mm": 7.0,
+  "residual_offset_mm": {
+    "dx": 2.0,
+    "dy": -1.0,
+    "dz": -1.7
+  },
+  "edge_thickness_mm": 11.819,
+  "clear_aperture_mm": 22.4,
+  "cartridge_z_range_mm": [
+    -10.2,
+    6.8
+  ],
+  "extension_mm": {
+    "front": 2.8,
+    "back": 6.2
+  },
+  "lens_rim_z_mm": [
+    -7.7595,
+    4.3595
+  ],
+  "seat_half": null,
+  "stamp_half": null,
+  "usable_radius_mm": 19.1841,
+  "warnings": []
+}
