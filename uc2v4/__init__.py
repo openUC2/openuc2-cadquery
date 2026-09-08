@@ -18,7 +18,16 @@ from .interface import (
     SquareInsertInterface,
     SpringTemplate,
 )
+from .fold_insert import FoldInsertParams, FoldPlan, Plate, build_fold_insert, plan_fold_insert
 from .lens_insert import LensInsertParams, build_lens_insert
+from .sm1_adapter import (
+    SM1_MAJOR_DIAM_MM,
+    SM1_PITCH_MM,
+    SM1AdapterParams,
+    SM1Plan,
+    build_sm1_adapter,
+    plan_sm1_adapter,
+)
 from .lens_cartridge import (
     CartridgeParams,
     CartridgePlan,
@@ -48,6 +57,17 @@ __all__ = [
     "SpringTemplate",
     "LensInsertParams",
     "build_lens_insert",
+    "Plate",
+    "FoldInsertParams",
+    "FoldPlan",
+    "plan_fold_insert",
+    "build_fold_insert",
+    "SM1AdapterParams",
+    "SM1Plan",
+    "plan_sm1_adapter",
+    "build_sm1_adapter",
+    "SM1_MAJOR_DIAM_MM",
+    "SM1_PITCH_MM",
     "MasterInsertParams",
     "build_master_insert",
 ]
