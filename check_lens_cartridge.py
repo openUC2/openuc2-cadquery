@@ -59,6 +59,16 @@ CASES = [
     ("trapped lens -> bore + stamp",
      lc.Lens(25.4, 5.0, 51.5, -51.5), lc.Pose(x_mm=2.0, y_mm=-1.0, z_mm=5.3),
      lc.CartridgeParams()),
+    # Any sag profile, not only spheres: a flat plate (filters, windows), an
+    # even asphere cut from its own polynomial, and a cylinder as a prism.
+    ("plano plate: a 25 mm filter, 2 mm thick",
+     lc.Lens(25.0, 2.0), lc.Pose(z_mm=3.0), lc.CartridgeParams()),
+    ("even asphere front (k=-0.6, A4, A6), plano back",
+     lc.Lens(12.7, 5.0, 6.5, math.inf, conic1=-0.6, asphere1=(0.0, 1e-4, -2e-6)),
+     lc.Pose(x_mm=1.0, z_mm=2.4), lc.CartridgeParams()),
+    ("plano-convex cylinder on a 12.7 x 12.7 blank, turned 30 deg",
+     lc.Lens(0.0, 3.0, 25.8, math.inf, outline_mm=(12.7, 12.7)),
+     lc.Pose(z_mm=-2.0, rz_deg=30.0), lc.CartridgeParams()),
 ]
 
 

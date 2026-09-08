@@ -61,13 +61,71 @@ except ImportError:                     # pragma: no cover
 # inputs
 # ---------------------------------------------------------------------------
 
+#: Samples along a non-spherical profile (spheres stay exact arcs, never sampled).
+PROFILE_SAMPLES = 64
+
+
+@dataclass(frozen=True)
+class Surface:
+    """One rotationally symmetric face: a conic plus Optiland's even-asphere terms.
+
+    ``radius_mm`` > 0 puts the centre of curvature on +Z; ``math.inf`` is flat.
+    ``coefficients[i]`` multiplies r^(2i+2) — the first term is r², as in
+    Optiland's ``EvenAsphere`` (a vendor A4 sits at index 1).
+    """
+
+    radius_mm: float = math.inf
+    conic: float = 0.0
+    coefficients: tuple[float, ...] = ()
+
+    @property
+    def is_plano(self) -> bool:
+        return not math.isfinite(self.radius_mm) and not any(self.coefficients)
+
+    @property
+    def is_sphere(self) -> bool:
+        return (math.isfinite(self.radius_mm) and self.conic == 0.0
+                and not any(self.coefficients))
+
+    def _conic_root(self, r: float) -> float:
+        c = 1.0 / self.radius_mm
+        term = 1.0 - (1.0 + self.conic) * c * c * r * r
+        if term < 0.0:
+            raise ValueError(
+                f"surface R={self.radius_mm} mm, k={self.conic} ends before r={r} mm "
+                "— that surface cannot span the lens")
+        return math.sqrt(term)
+
+    def sag(self, r: float) -> float:
+        """Axial rise from the vertex at radial height *r*."""
+        z = 0.0
+        if math.isfinite(self.radius_mm):
+            z = r * r / (self.radius_mm * (1.0 + self._conic_root(r)))
+        r2 = r * r
+        for i, a in enumerate(self.coefficients):
+            z += a * r2 ** (i + 1)
+        return z
+
+    def slope(self, r: float) -> float:
+        """dz/dr at *r* — the normal offset needs it."""
+        m = 0.0
+        if math.isfinite(self.radius_mm):
+            m = r / (self.radius_mm * self._conic_root(r))
+        r2 = r * r
+        for i, a in enumerate(self.coefficients):
+            m += 2.0 * (i + 1) * a * r * r2 ** i
+        return m
+
+
 @dataclass(frozen=True)
 class Lens:
-    """A spherical singlet.
+    """A round — or, with ``outline_mm``, rectangular — optic between two faces.
 
-    Sign convention is the optical one: a surface radius is positive when its
-    centre of curvature lies on the +Z side of the vertex, so a biconvex lens
-    has ``r1_mm > 0`` and ``r2_mm < 0``. Use ``math.inf`` for a flat surface.
+    ``r1_mm``/``r2_mm`` are the vertex radii (optical sign: a biconvex lens has
+    ``r1_mm > 0`` and ``r2_mm < 0``; ``math.inf`` is flat); ``conic1/2`` and
+    ``asphere1/2`` complete each face as a :class:`Surface`. ``outline_mm`` =
+    (W, H) makes a cylindrical lens: the profile runs along W (x) and is
+    extruded over H, and ``diameter_mm`` becomes the bounding circle.
     """
 
     diameter_mm: float
@@ -75,26 +133,53 @@ class Lens:
     r1_mm: float = math.inf
     r2_mm: float = math.inf
     reference: str = "center"   # "center" | "front_vertex" | "back_vertex"
+    conic1: float = 0.0
+    conic2: float = 0.0
+    asphere1: tuple[float, ...] = ()
+    asphere2: tuple[float, ...] = ()
+    outline_mm: tuple[float, float] | None = None
+
+    def __post_init__(self) -> None:
+        if self.outline_mm is not None:
+            object.__setattr__(self, "diameter_mm", math.hypot(*self.outline_mm))
+
+    @property
+    def front(self) -> Surface:
+        return Surface(self.r1_mm, self.conic1, tuple(self.asphere1))
+
+    @property
+    def back(self) -> Surface:
+        return Surface(self.r2_mm, self.conic2, tuple(self.asphere2))
+
+    @property
+    def is_round_spherical(self) -> bool:
+        """Flat or spherical faces on a round blank — the exact-arc road."""
+        return self.outline_mm is None and all(
+            s.is_plano or s.is_sphere for s in (self.front, self.back))
 
     @property
     def semi_diameter(self) -> float:
+        """Circumscribed radius — what the round holder has to clear."""
         return self.diameter_mm / 2.0
 
+    @property
+    def half_width(self) -> float:
+        """Radial reach of the curved profile (W/2 for a cylinder)."""
+        return self.outline_mm[0] / 2.0 if self.outline_mm else self.diameter_mm / 2.0
+
     def sag(self, radius: float, semi_diameter: float | None = None) -> float:
-        """Axial rise of a surface from its vertex to *semi_diameter*."""
-        h = self.semi_diameter if semi_diameter is None else semi_diameter
-        if not math.isfinite(radius):
-            return 0.0
-        if abs(radius) < h:
-            raise ValueError(
-                f"surface radius {radius} mm is smaller than the semi-diameter "
-                f"{h} mm — that surface cannot span the lens")
-        return radius - math.copysign(math.sqrt(radius * radius - h * h), radius)
+        """Spherical sag of a face of *radius* at *semi_diameter* (default: the rim)."""
+        h = self.half_width if semi_diameter is None else semi_diameter
+        return Surface(radius).sag(h)
+
+    def sags(self) -> tuple[float, float]:
+        """(front, back) sag at the rim."""
+        return self.front.sag(self.half_width), self.back.sag(self.half_width)
 
     @property
     def edge_thickness_mm(self) -> float:
-        et = self.center_thickness_mm + self.sag(self.r2_mm) - self.sag(self.r1_mm)
-        return et
+        s1, s2 = self.sags()
+        return self.center_thickness_mm + s2 - s1
 
     def vertices(self) -> tuple[float, float]:
         """(z of surface-1 vertex, z of surface-2 vertex) about the reference."""
@@ -108,12 +193,14 @@ class Lens:
         raise ValueError(f"unknown Lens.reference {self.reference!r}")
 
     def validate(self) -> None:
+        if self.outline_mm is not None and min(self.outline_mm) <= 0.0:
+            raise ValueError("a rectangular outline needs a positive width and height")
         if self.diameter_mm <= 0 or self.center_thickness_mm <= 0:
             raise ValueError("lens diameter and centre thickness must be positive")
         if self.edge_thickness_mm <= 0:
             raise ValueError(
                 f"edge thickness is {self.edge_thickness_mm:.3f} mm — this lens "
-                "closes up before its rim; check r1/r2 against the diameter")
+                "closes up before its rim; check the faces against the diameter")
 
 
 @dataclass(frozen=True)
@@ -357,7 +444,7 @@ def _axial_reach(plan: CartridgePlan):
     lens, params = plan.lens, plan.params
     _, _, dz = plan.residual_mm
     zv1, zv2 = lens.vertices()
-    s1, s2 = lens.sag(lens.r1_mm), lens.sag(lens.r2_mm)
+    s1, s2 = lens.sags()
     tilt = math.radians(max(abs(plan.pose.rx_deg), abs(plan.pose.ry_deg)))
     infl = lens.semi_diameter * math.sin(tilt) + params.fit_clearance_mm
     return (dz + min(zv1, zv1 + s1) - infl,
@@ -385,8 +472,8 @@ def _check_fit(plan: CartridgePlan) -> None:
 
     # Axial: the lens' own extent, inflated by tilt, must sit inside the puck.
     zv1, zv2 = lens.vertices()
-    half_extent = max(abs(zv1), abs(zv2), abs(zv1 + lens.sag(lens.r1_mm)),
-                      abs(zv2 + lens.sag(lens.r2_mm)))
+    s1, s2 = lens.sags()
+    half_extent = max(abs(zv1), abs(zv2), abs(zv1 + s1), abs(zv2 + s2))
     tilt = max(abs(plan.pose.rx_deg), abs(plan.pose.ry_deg))
     half_extent += lens.semi_diameter * math.sin(math.radians(tilt))
     half_extent += params.fit_clearance_mm
@@ -448,14 +535,20 @@ def _surface_arc(z_center: float, radius: float, h: float, z_vertex: float):
 
 
 def lens_solid(lens: Lens, clearance: float = 0.0) -> cq.Workplane:
-    """The lens as a revolved solid, uniformly grown by *clearance*.
+    """The lens as a solid, uniformly grown by *clearance*.
 
-    Growing a sphere outward is exact in the signed convention: the centre of
-    curvature stays put, so r1 -> r1 + c and r2 -> r2 - c while the vertices
-    move apart by c. The only approximation is the rim, where the offset is a
-    sharp corner instead of a c-radius round — i.e. slightly more clearance.
+    Spheres are exact: growing one keeps its centre, so r1 -> r1 + c, r2 -> r2 - c
+    and the vertices move apart by c. Any other face is sampled and pushed along
+    its normal (``PROFILE_SAMPLES`` points into a spline). The rim is a sharp
+    corner either way — slightly more clearance there, never less. A rectangular
+    outline extrudes the profile instead of revolving it.
     """
-    c = clearance
+    if lens.is_round_spherical:
+        return _spherical_solid(lens, clearance)
+    return _profiled_solid(lens, clearance)
+
+
+def _spherical_solid(lens: Lens, c: float) -> cq.Workplane:
     zv1, zv2 = lens.vertices()
     zv1, zv2 = zv1 - c, zv2 + c
     r1 = lens.r1_mm + c if math.isfinite(lens.r1_mm) else math.inf
@@ -465,7 +558,7 @@ def lens_solid(lens: Lens, clearance: float = 0.0) -> cq.Workplane:
     for radius, name in ((r1, "r1"), (r2, "r2")):
         if math.isfinite(radius) and abs(radius) < h:
             raise ValueError(
-                f"with {clearance} mm clearance the {name} surface (R={radius:.3f}) "
+                f"with {c} mm clearance the {name} surface (R={radius:.3f}) "
                 f"can no longer span the Ø{2 * h:.3f} mm rim")
 
     v1, m1, e1 = _surface_arc(zv1 + r1 if math.isfinite(r1) else 0.0, r1, h, zv1)
@@ -476,6 +569,66 @@ def lens_solid(lens: Lens, clearance: float = 0.0) -> cq.Workplane:
     wp = wp.lineTo(*e2)
     wp = wp.lineTo(*v2) if not math.isfinite(r2) else wp.threePointArc(m2, v2)
     return wp.close().revolve(360.0, (0, 0, 0), (0, 1, 0))
+
+
+def _offset_points(surface: Surface, z_vertex: float, h: float, c: float, sign: float):
+    """(r, z) samples of a face pushed *c* along its outward normal.
+
+    *sign* is -1 for the front face (its outside is -z) and +1 for the back.
+    """
+    pts = []
+    for i in range(PROFILE_SAMPLES + 1):
+        r = h * i / PROFILE_SAMPLES
+        z = z_vertex + surface.sag(r)
+        if c:
+            m = surface.slope(r)
+            s = math.hypot(1.0, m)
+            r, z = max(r - sign * c * m / s, 0.0), z + sign * c / s
+        pts.append((r, z))
+    return pts
+
+
+def _outline(lens: Lens, c: float, h: float, full: bool) -> cq.Workplane:
+    """Closed outline of the grown lens on the XZ plane.
+
+    Half profile r in [0, h + c] to revolve, or (*full*) x in ±(h + c) to extrude.
+    """
+    zv1, zv2 = lens.vertices()
+    front = _offset_points(lens.front, zv1, h, c, -1.0)
+    back = _offset_points(lens.back, zv2, h, c, +1.0)
+    if full:
+        front = [(-r, z) for r, z in reversed(front[1:])] + front
+        back = [(-r, z) for r, z in reversed(back[1:])] + back
+    rim = h + c
+    left = -rim if full else 0.0
+
+    wp = cq.Workplane("XZ").moveTo(left, front[0][1])
+    if front[0][0] > left + 1e-9:
+        wp = wp.lineTo(*front[0])
+    if lens.front.is_plano:
+        wp = wp.lineTo(*front[-1])
+    else:
+        wp = wp.spline(front[1:], includeCurrent=True)
+    if front[-1][0] < rim - 1e-9:
+        wp = wp.lineTo(rim, front[-1][1])
+    wp = wp.lineTo(rim, back[-1][1])
+    if back[-1][0] < rim - 1e-9:
+        wp = wp.lineTo(*back[-1])
+    if lens.back.is_plano:
+        wp = wp.lineTo(*back[0])
+    else:
+        wp = wp.spline(back[-2::-1], includeCurrent=True)
+    if back[0][0] > left + 1e-9:
+        wp = wp.lineTo(left, back[0][1])
+    return wp.close()
+
+
+def _profiled_solid(lens: Lens, c: float) -> cq.Workplane:
+    if lens.outline_mm:
+        width, height = lens.outline_mm
+        return _outline(lens, c, width / 2.0, full=True).extrude(height / 2.0 + c, both=True)
+    return _outline(lens, c, lens.semi_diameter, full=False).revolve(
+        360.0, (0, 0, 0), (0, 1, 0))
 
 
 def _place(shape, plan: CartridgePlan, extra_shift: tuple = (0.0, 0.0, 0.0)):
@@ -537,9 +690,10 @@ def _seat_geometry(plan: CartridgePlan):
     """
     lens, c = plan.lens, plan.params.fit_clearance_mm
     zv1, zv2 = lens.vertices()
+    s1, s2 = lens.sags()
     if plan.seat_half == "front":       # lens sits at +z, joint is at -local z
-        return -1.0, zv1 + lens.sag(lens.r1_mm) - c
-    return +1.0, zv2 + lens.sag(lens.r2_mm) + c
+        return -1.0, zv1 + s1 - c
+    return +1.0, zv2 + s2 + c
 
 
 def _axis_cylinder(plan: CartridgePlan, radius: float, local_z0: float,
@@ -680,7 +834,9 @@ def _half_blank(plan: CartridgePlan, extension: float) -> cq.Workplane:
 
 def _auto_label(plan: CartridgePlan, side: str) -> str:
     n = "" if plan.notch_index < 0 else f"N{plan.notch_index}"
-    return f"D{plan.lens.diameter_mm:g} {n} {side[0].upper()}".replace("  ", " ").strip()
+    outline = plan.lens.outline_mm
+    size = f"{outline[0]:g}x{outline[1]:g}" if outline else f"D{plan.lens.diameter_mm:g}"
+    return f"{size} {n} {side[0].upper()}".replace("  ", " ").strip()
 
 
 def _engrave(half: cq.Workplane, plan: CartridgePlan, text: str,

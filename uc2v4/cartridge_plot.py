@@ -34,19 +34,13 @@ INK = "#12303d"
 
 def _lens_outline(lens, n: int = 60):
     """(offset-from-axis, axial) points tracing the lens cross-section."""
-    h = lens.semi_diameter
+    h = lens.half_width
     zv1, zv2 = lens.vertices()
     pts_top, pts_bot = [], []
     for i in range(n + 1):
         y = -h + 2.0 * h * i / n
-        for radius, zv, store in ((lens.r1_mm, zv1, pts_top),
-                                  (lens.r2_mm, zv2, pts_bot)):
-            if math.isfinite(radius):
-                z = zv + radius - math.copysign(
-                    math.sqrt(max(radius * radius - y * y, 0.0)), radius)
-            else:
-                z = zv
-            store.append((z, y))
+        pts_top.append((zv1 + lens.front.sag(abs(y)), y))
+        pts_bot.append((zv2 + lens.back.sag(abs(y)), y))
     return pts_top + pts_bot[::-1]
 
 

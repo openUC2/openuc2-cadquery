@@ -25,6 +25,7 @@ from .lens_cartridge import (
     CubeInterface,
     Lens,
     Pose,
+    Surface,
     build_cartridge,
     generate_lens_holder,
     plan_cartridge,
@@ -34,6 +35,7 @@ from .master_insert import MasterInsertParams, build_master_insert
 __all__ = [
     "GRID_MM",
     "Lens",
+    "Surface",
     "Pose",
     "CubeInterface",
     "CartridgeParams",
