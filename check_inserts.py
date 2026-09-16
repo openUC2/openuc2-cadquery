@@ -40,6 +40,7 @@ def load(name: str):
 
 fi = load("fold_insert")
 sm1 = load("sm1_adapter")
+bs = load("beamsplitter_insert")
 
 # The plate cases: the fluorescence dichroic, a 1" fold mirror, a round filter
 # standing square across the beam.
@@ -228,10 +229,140 @@ def check_sm1() -> bool:
     return ok
 
 
+def check_beamsplitter() -> bool:
+    print("=== beamsplitter clamshell: Ø25.4 exc + Ø25.4 emi + 25x25 dichroic")
+    exc = fi.Plate(thickness_mm=4.0, diameter_mm=25.4)
+    emi = fi.Plate(thickness_mm=4.0, diameter_mm=25.4)
+    dic = fi.Plate(thickness_mm=1.0, outline_mm=(25.0, 25.0))
+    params = bs.BeamsplitterParams(excitation=exc, emission=emi, dichroic=dic,
+                                   beam_diameter_mm=18.0)
+    plan = bs.plan_beamsplitter(params)
+    lower, upper = bs.build_beamsplitter_insert(plan=plan)
+    ok = True
+
+    nl, nu = len(lower.solids().vals()), len(upper.solids().vals())
+    print(f"  solids: lower={nl} upper={nu}", "OK" if nl == nu == 1 else "FAIL")
+    ok &= nl == nu == 1
+    lo, up = solid_of(lower), solid_of(upper)
+
+    overlap = lo.intersect(up).Volume()
+    print(f"  half-to-half overlap: {overlap:.6f} mm^3", "OK" if overlap < 1e-6 else "FAIL")
+    ok &= overlap < 1e-6
+
+    body = lo.fuse(up)
+    bb = body.BoundingBox()
+    span = max(abs(bb.xmin), abs(bb.xmax), abs(bb.ymin), abs(bb.ymax))
+    inside = span <= params.interface.edge_half + 1e-6
+    print(f"  envelope: {span:.3f} <= {params.interface.edge_half:.3f}",
+          "OK" if inside else "FAIL")
+    ok &= inside
+    tall = abs(bb.zlen - plan.thickness_mm) < 1e-6
+    print(f"  thickness: {bb.zlen:.3f} == {plan.thickness_mm:.3f}", "OK" if tall else "FAIL")
+    ok &= tall
+
+    optics = [("dichroic", bs.dichroic_solid(dic, params, 0.0),
+               bs.dichroic_solid(dic, params, params.fit_clearance_mm * 3.0)),
+              ("excitation", bs.filter_solid(bs.EXCITATION, exc, params, 0.0),
+               bs.filter_solid(bs.EXCITATION, exc, params, params.fit_clearance_mm * 3.0)),
+              ("emission", bs.filter_solid(bs.EMISSION, emi, params, 0.0),
+               bs.filter_solid(bs.EMISSION, emi, params, params.fit_clearance_mm * 3.0))]
+    for name, nominal, fat in optics:
+        clash = body.intersect(nominal).Volume()
+        print(f"  {name} nominal vs holder: {clash:.5f} mm^3",
+              "OK" if clash < 1e-3 else "FAIL")
+        ok &= clash < 1e-3
+        grip = body.intersect(fat).Volume()
+        print(f"  {name} seat snugness (oversized must clash): {grip:.3f} mm^3",
+              "OK" if grip > 1e-3 else "FAIL")
+        ok &= grip > 1e-3
+
+    def corridor(seat_solid) -> float:
+        swept = None
+        for i in range(10):
+            step = seat_solid.translate(cq.Vector(0, 0, params.interface.edge_half * i / 9.0))
+            swept = step if swept is None else swept.fuse(step)
+        return lo.intersect(swept).Volume()
+    for name, nominal, _ in optics:
+        obstruct = corridor(nominal)
+        print(f"  {name} liftable from split: {obstruct:.5f} mm^3 obstructing",
+              "OK" if obstruct < 1e-3 else "FAIL")
+        ok &= obstruct < 1e-3
+
+    legs = [("excitation in", (1, 0, 0)), ("sample", (0, -1, 0)),
+            ("emission out", (0, 1, 0)), ("reflected", plan.reflected_dir)]
+    for leg, direction in legs:
+        blocked = ray_clear(body, direction, params.beam_diameter_mm / 2.0 - 0.05,
+                            params.interface.edge_half + plan.thickness_mm)
+        print(f"  {leg} leg clear: {blocked:.6f} mm^3", "OK" if blocked < 1e-3 else "FAIL")
+        ok &= blocked < 1e-3
+
+    for (x, y) in params.pin_positions:
+        pin = cq.Solid.makeCylinder(params.pin_diameter_mm / 2.0, plan.thickness_mm,
+                                    pnt=cq.Vector(x, y, -plan.thickness_mm / 2.0),
+                                    dir=cq.Vector(0, 0, 1))
+        in_lo = lo.intersect(pin).Volume()
+        in_up = up.intersect(pin).Volume()
+        clear = in_lo < 1e-3 and in_up < 1e-3
+        print(f"  pin hole ({x:+.1f},{y:+.1f}) clear both halves: "
+              f"lo={in_lo:.4f} up={in_up:.4f}", "OK" if clear else "FAIL")
+        ok &= clear
+
+    for w in plan.warnings:
+        print(f"  note: {w}")
+    print(f"  --> {'PASS' if ok else 'FAIL'}\n")
+    return ok
+
+
+def check_beamsplitter_shapes() -> bool:
+    print("=== beamsplitter shape mix: square exc, round emi, round dichroic")
+    params = bs.BeamsplitterParams(
+        excitation=fi.Plate(thickness_mm=2.0, outline_mm=(20.0, 20.0)),
+        emission=fi.Plate(thickness_mm=3.5, diameter_mm=25.0),
+        dichroic=fi.Plate(thickness_mm=1.0, diameter_mm=25.4),
+        beam_diameter_mm=16.0)
+    plan = bs.plan_beamsplitter(params)
+    lower, upper = bs.build_beamsplitter_insert(plan=plan)
+    nl, nu = len(lower.solids().vals()), len(upper.solids().vals())
+    ok = nl == nu == 1
+    print(f"  solids: lower={nl} upper={nu}", "OK" if ok else "FAIL")
+    for w in plan.warnings:
+        print(f"  note: {w}")
+    print(f"  --> {'PASS' if ok else 'FAIL'}\n")
+    return ok
+
+
+def check_beamsplitter_refusals() -> bool:
+    print("=== beamsplitter refusals")
+    ok = True
+    cases = [
+        ("a dichroic too tall for a forced-thin insert",
+         bs.BeamsplitterParams(dichroic=fi.Plate(thickness_mm=1.0, outline_mm=(40, 40)),
+                               thickness_mm=12.0)),
+        ("a dichroic wider than the shoulder",
+         bs.BeamsplitterParams(dichroic=fi.Plate(thickness_mm=1.0, outline_mm=(60, 10)))),
+        ("a 90 deg fold",
+         bs.BeamsplitterParams(dichroic=fi.Plate(thickness_mm=1.0, diameter_mm=20.0),
+                               fold_deg=90.0)),
+    ]
+    for label, params in cases:
+        try:
+            bs.plan_beamsplitter(params)
+        except ValueError as exc:
+            print(f"  {label}: refused — {str(exc)[:64]}", "OK")
+        else:
+            print(f"  {label}: NOT refused", "FAIL")
+            ok = False
+    print(f"  --> {'PASS' if ok else 'FAIL'}\n")
+    return ok
+
+
 def main() -> None:
     results = [check_fold(*case) for case in PLATES]
     results.append(check_refusals())
     results.append(check_sm1())
+    results.append(check_beamsplitter())
+    results.append(check_beamsplitter_shapes())
+    results.append(check_beamsplitter_refusals())
     print(f"{sum(results)}/{len(results)} checks passed")
     sys.exit(0 if all(results) else 1)
 

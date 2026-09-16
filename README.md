@@ -51,7 +51,37 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > overlap, zero lens-to-holder collision, snug pocket, pose reproduced,
 > envelope respected, **and the cone rings facing the joint** — the halves are
 > not symmetric and a mirrored build passes every other check).
+
+> **Beamsplitter / fluorescence-filter cubes — `uc2v4/beamsplitter_insert.py`.**
+> A printable two-part **clamshell** (modelled on PRT-2074 / PRT-2075) that
+> carries an **excitation filter**, an **emission filter** and a **45° dichroic**
+> through one cube. Each optic is independently a round disc or a rectangular
+> plate, with its own thickness; the excitation reflects off the dichroic to
+> the sample port, the emission passes straight through:
 >
+> ```bash
+> uv run --with cadquery python uc2v4/beamsplitter_insert.py            # the reference set
+> uc2cad beamsplitter --exc-diam 25.4 --exc-thick 4 \
+>                     --emi-diam 25.4 --emi-thick 4 \
+>                     --dic-w 25 --dic-thick 1 --beam 18                 # or via the CLI
+> ```
+>
+> It writes the **lower and upper** halves (STEP + STL) plus the plan JSON.
+> `check_inserts.py` verifies each build (one solid per half, no overlap, every
+> optic drops into its seat and lifts out of the split plane, all beam legs
+> bored, pins registered). Design write-up:
+> [`DOCS-beamsplitter-insert.md`](DOCS-beamsplitter-insert.md).
+
+> **Browser wizard — `uc2cad wizard`.** No command line needed: run it and a
+> page opens where you enter the numbers for a **lens holder** or a
+> **beamsplitter cube** and download a ZIP of the printable files. It uses only
+> the Python standard library (plus CadQuery), so it runs anywhere the
+> generators do:
+>
+> ```bash
+> uv run --with cadquery python -m uc2v4.wizard        # opens http://127.0.0.1:8137/
+> ```
+
 > The scripts below predate the extraction and approximate the outline from
 > drawings — still useful as simple starting points, but `uc2v4/` is the
 > measured reference.

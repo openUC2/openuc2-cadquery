@@ -19,6 +19,10 @@ def main(argv: list[str] | None = None) -> int:
             "commands:\n"
             "  lens-cartridge   printable front/back pair holding a lens at an\n"
             "                   arbitrary pose inside a V4 cube (--help for flags)\n"
+            "  beamsplitter     printable clamshell holding an excitation filter,\n"
+            "                   emission filter and 45 deg dichroic (--help for flags)\n"
+            "  wizard           open the browser wizard to enter parameters and\n"
+            "                   download parts (lens or beamsplitter)\n"
             "  master-insert    the molded PRT-2123 master insert, as STEP\n"
             "  lens-insert      the molded PRT-2027 square lens insert, as STEP\n"
         )
@@ -30,6 +34,15 @@ def main(argv: list[str] | None = None) -> int:
 
         _cli(rest)
         return 0
+    if command == "beamsplitter":
+        from .beamsplitter_insert import _cli
+
+        _cli(rest)
+        return 0
+    if command == "wizard":
+        from .wizard import main as wizard_main
+
+        return wizard_main(rest)
     if command in ("master-insert", "lens-insert"):
         import cadquery as cq
 

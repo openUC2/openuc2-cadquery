@@ -18,6 +18,12 @@ from .interface import (
     SquareInsertInterface,
     SpringTemplate,
 )
+from .beamsplitter_insert import (
+    BeamsplitterParams,
+    BeamsplitterPlan,
+    build_beamsplitter_insert,
+    plan_beamsplitter,
+)
 from .fold_insert import FoldInsertParams, FoldPlan, Plate, build_fold_insert, plan_fold_insert
 from .lens_insert import LensInsertParams, build_lens_insert
 from .sm1_adapter import (
@@ -62,6 +68,10 @@ __all__ = [
     "FoldPlan",
     "plan_fold_insert",
     "build_fold_insert",
+    "BeamsplitterParams",
+    "BeamsplitterPlan",
+    "plan_beamsplitter",
+    "build_beamsplitter_insert",
     "SM1AdapterParams",
     "SM1Plan",
     "plan_sm1_adapter",
