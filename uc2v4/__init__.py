@@ -18,6 +18,7 @@ from .interface import (
     SquareInsertInterface,
     SpringTemplate,
 )
+from .filter_cube import FilterCubeParams, RoundFilter, build_filter_cube, plan_filter_cube
 from .beamsplitter_insert import (
     BeamsplitterParams,
     BeamsplitterPlan,
@@ -69,6 +70,10 @@ __all__ = [
     "plan_fold_insert",
     "build_fold_insert",
     "BeamsplitterParams",
+    "FilterCubeParams",
+    "RoundFilter",
+    "build_filter_cube",
+    "plan_filter_cube",
     "BeamsplitterPlan",
     "plan_beamsplitter",
     "build_beamsplitter_insert",

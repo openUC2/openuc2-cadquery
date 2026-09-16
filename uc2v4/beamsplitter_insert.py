@@ -183,7 +183,7 @@ def filter_seat_center(port: Port, plate: Plate,
     The glass sits with its outer face flush to the outline (it beds against
     the cube wall), so its centre is half a thickness in.
     """
-    return params.interface.edge_half - plate.thickness_mm / 2.0
+    return params.interface.edge_half - plate.thickness_mm / 2.0 - 1
 
 
 def _axis_box(port: Port, along: float, width: float, height: float,
@@ -238,11 +238,12 @@ def _filter_cutter(port: Port, plate: Plate, params: BeamsplitterParams) -> cq.S
     """
     c = params.fit_clearance_mm
     v = port.vec()
+    lip = 1
     outer = params.interface.edge_half
     # the pocket spans from a lip just inside the glass out past the face
-    inner = filter_seat_center(port, plate, params) - plate.thickness_mm / 2.0 - c
-    length = (outer + 0.5) - inner
-    center = (inner + outer + 0.5) / 2.0
+    inner = filter_seat_center(port, plate, params) - plate.thickness_mm / 2.0 - c - lip
+    length = (outer + 0.5) - inner - lip
+    center = (inner + outer + 0.5) / 2.0  
     if plate.diameter_mm is not None:
         seat_r = plate.diameter_mm / 2.0 + c
         pocket = cq.Solid.makeCylinder(seat_r, length, pnt=v.multiply(inner), dir=v)
@@ -301,7 +302,7 @@ def plan_beamsplitter(params: BeamsplitterParams | None = None) -> BeamsplitterP
     for port, opt in params.optics():
         if opt is None:
             continue
-        clear = min(opt.extents) / 2.0
+        clear = min(opt.extents) / 2.0 
         if params.beam_diameter_mm / 2.0 > clear - lip:
             plan.warnings.append(
                 f"{port.name}: the {params.beam_diameter_mm:g} mm bore leaves under "
@@ -316,9 +317,9 @@ def plan_beamsplitter(params: BeamsplitterParams | None = None) -> BeamsplitterP
 
 def _all_cutters(plan: BeamsplitterPlan) -> list[cq.Solid]:
     params = plan.params
-    c = params.fit_clearance_mm
-    r = params.beam_diameter_mm / 2.0
-    reach = _reach(params.interface, plan.thickness_mm)
+    c = params.fit_clearance_mm 
+    r = params.beam_diameter_mm / 2.0 
+    reach = _reach(params.interface, plan.thickness_mm) 
     cutters: list[cq.Solid] = []
 
     if params.dichroic is not None:
