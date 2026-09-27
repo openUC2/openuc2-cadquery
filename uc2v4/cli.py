@@ -21,8 +21,10 @@ def main(argv: list[str] | None = None) -> int:
             "                   arbitrary pose inside a V4 cube (--help for flags)\n"
             "  beamsplitter     printable clamshell holding an excitation filter,\n"
             "                   emission filter and 45 deg dichroic (--help for flags)\n"
+            "  plates           top + base plate of an optical module (OPM) for any\n"
+            "                   layout, e.g. --layout 3x8+1x1@-1,0 (--help for flags)\n"
             "  wizard           open the browser wizard to enter parameters and\n"
-            "                   download parts (lens or beamsplitter)\n"
+            "                   download parts (lens, beamsplitter or OPM plates)\n"
             "  master-insert    the molded PRT-2123 master insert, as STEP\n"
             "  lens-insert      the molded PRT-2027 square lens insert, as STEP\n"
         )
@@ -36,6 +38,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if command == "beamsplitter":
         from .beamsplitter_insert import _cli
+
+        _cli(rest)
+        return 0
+    if command == "plates":
+        from .opm_plates import _cli
 
         _cli(rest)
         return 0

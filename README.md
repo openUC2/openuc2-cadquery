@@ -72,11 +72,33 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > bored, pins registered). Design write-up:
 > [`DOCS-beamsplitter-insert.md`](DOCS-beamsplitter-insert.md).
 
+> **Optical-module plates — `uc2v4/opm_plates.py`.** The two 5 mm aluminium
+> plates that sandwich an OPM, for **any layout**: a core rectangle such as
+> `3x8` or `3x3` plus extra puzzle units on any side (`3x8+1x1@-1,0`), or a
+> layout drawn as ASCII art. Built from the master `MAS - 1003 - Base plates
+> Al - V04` and the released pairs (PRT-1051/1052 FLIM 488, 1053/1054, 1026/1027,
+> 1047/1048): 50.0 × 50.1 mm cells with four M3 holes and a Ø38 pocket each,
+> R1.5/R10.2 corners, the outward-face chamfer, tie rods at the core's corners
+> (every ≤ 3 cells along long edges — the released rule), counterbores on the
+> top, sleeve-nut U-slot recesses underneath, optional M37×0.5 ports:
+>
+> ```bash
+> uv run --with cadquery --with matplotlib python build_opm_plates.py   # edit the layouts in there
+> uc2cad plates --layout 3x8+1x1@-1,0 --port 1,7                       # or via the CLI
+> ```
+>
+> Each module writes the top and base plate (STEP + STL), the assembled stack,
+> a plan JSON (cells, tie rods, ports, hardware such as `8 x ISO 4762 M3x115`)
+> and a layout diagram. `check_opm_plates.py` reproduces the tie rods of all five
+> released plate families and matches PRT-1052 feature for feature (all 149
+> cylindrical features, same 203 faces, volume −0.012 %). Design write-up:
+> [`DOCS-opm-plates.md`](DOCS-opm-plates.md).
+
 > **Browser wizard — `uc2cad wizard`.** No command line needed: run it and a
 > page opens where you enter the numbers for a **lens holder** or a
-> **beamsplitter cube** and download a ZIP of the printable files. It uses only
-> the Python standard library (plus CadQuery), so it runs anywhere the
-> generators do:
+> **beamsplitter cube**, or click an **OPM plate layout** together on a grid,
+> and download a ZIP of the files. It uses only the Python standard library
+> (plus CadQuery), so it runs anywhere the generators do:
 >
 > ```bash
 > uv run --with cadquery python -m uc2v4.wizard        # opens http://127.0.0.1:8137/

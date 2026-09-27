@@ -15,3 +15,6 @@ jobs:
       - run: python build_uc2v4.py --no-verify
       - run: python build_mirror_holder.py --no-verify
       - run: python check_lens_cartridge.py
+      # OPM plates: rod rule vs the released plates, layouts, refusals
+      # (the PRT-1051/1052 STEP comparison runs when extracted/plates/ is committed)
+      - run: uc2cad plates --help && python check_opm_plates.py

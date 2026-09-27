@@ -1,10 +1,10 @@
-"""A tiny standalone wizard to generate inserts and download the files.
+"""A tiny standalone wizard to generate inserts and plates and download the files.
 
 `uc2cad wizard` (or ``python -m uc2v4.wizard``) starts a local web server and
-opens the browser. Pick **Lens holder** or **Beamsplitter cube**, fill in a
-handful of numbers, and the page hands you a ZIP of the printable STEP/STL
-files plus the plan JSON -- generated on the fly by the same CadQuery code the
-library and CLI use.
+opens the browser. Pick **Lens holder**, **Beamsplitter cube** or **OPM
+plates** (click the module's cells on a grid), fill in a handful of numbers,
+and the page hands you a ZIP of the STEP/STL files plus the plan JSON --
+generated on the fly by the same CadQuery code the library and CLI use.
 
 It is deliberately dependency-free (Python's ``http.server`` only), so it runs
 anywhere the generators run. Generation happens in a worker thread; the page
@@ -130,13 +130,52 @@ def _run_beamsplitter(form: dict) -> tuple[dict[str, bytes], dict, str]:
     return files, plan.report(), stem
 
 
+def _run_plates(form: dict) -> tuple[dict[str, bytes], dict, str]:
+    import re
+    import tempfile
+    from dataclasses import replace
+    from pathlib import Path
+
+    from .opm_plates import OpmPlateSpec, PlateGeometry, generate, layout_and_ports_from_ascii
+
+    def f(name, default):
+        v = form.get(name, [""])[0].strip()
+        return float(v) if v else default
+
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", form.get("name", [""])[0].strip()) or "opm_plates"
+    layout, ports = layout_and_ports_from_ascii(form.get("ascii", [""])[0], name=name)
+    geo = replace(PlateGeometry(), pitch_mm=(f("pitch_x", 50.0), f("pitch_y", 50.1)),
+                  m3_hole_d_mm=f("m3", 2.46))
+    spec = OpmPlateSpec(layout=layout, layers=int(f("layers", 2)), ports=ports,
+                        tie_rods=form.get("rods", ["auto"])[0],
+                        pockets=form.get("pockets", ["on"])[0] != "off",
+                        geometry=geo, name=name)
+    with tempfile.TemporaryDirectory() as d:
+        plan = generate(spec, out_dir=d, stem=name)
+        files = {p.name: p.read_bytes() for p in plan.files.values()}
+    rep = plan.report()
+    summary = {k: rep[k] for k in ("plate_size_mm", "layers", "top_offset_z_mm", "mass_g",
+                                   "hardware", "warnings") if k in rep}
+    summary["layout"] = rep["layout"]["ascii"]
+    summary["tie_rods"] = [f"{t['cell']} {t['corner']}" for t in rep["tie_rods"]]
+    summary["ports"] = [p["cell"] for p in rep["ports"]]
+    return files, summary, name
+
+
+_RUNNERS = {"lens": _run_lens, "beamsplitter": _run_beamsplitter, "plates": _run_plates}
+
+
 def _worker(token: str, kind: str, form: dict) -> None:
     try:
-        runner = _run_lens if kind == "lens" else _run_beamsplitter
-        files, plan, stem = runner(form)
+        files, plan, stem = _RUNNERS.get(kind, _run_lens)(form)
+        preview = next((data for name, data in files.items() if name.endswith(".png")), None)
         with _LOCK:
             _JOBS[token] = {"status": "done", "zip": _zip_dir(files),
                             "plan": plan, "stem": stem}
+            if preview:
+                import base64
+                _JOBS[token]["preview"] = ("data:image/png;base64,"
+                                           + base64.b64encode(preview).decode())
     except Exception as exc:                # a bad parameter set, usually
         with _LOCK:
             _JOBS[token] = {"status": "error", "error": str(exc),
@@ -164,13 +203,20 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
  button.go{background:#1f6b8c;color:#fff;border:0;border-radius:8px;padding:11px 20px;font:inherit;cursor:pointer;margin-top:8px}
  #out{margin-top:16px;padding:12px;border-radius:8px;background:#eef3f6;white-space:pre-wrap;display:none}
  .panel{display:none} .panel.on{display:block}
+ #grid{display:grid;grid-template-columns:repeat(12,26px);gap:2px;margin:8px 0;user-select:none}
+ #grid div{width:26px;height:26px;box-sizing:border-box;border:1px solid #cbd5db;border-radius:4px;background:#fff;cursor:pointer;font:600 12px/24px system-ui;text-align:center;color:#fff}
+ #grid div.c{background:#1f6b8c;border-color:#1f6b8c}
+ #grid div.e{background:#d99a3d;border-color:#d99a3d}
+ textarea{font:13px/1.25 ui-monospace,monospace;width:220px;border:1px solid #cbd5db;border-radius:6px;padding:6px}
+ #preview{max-width:100%;margin-top:12px;display:none;border-radius:8px;border:1px solid #cbd5db}
 </style></head><body>
-<h1>openUC2 insert wizard</h1>
-<p class="hint">Enter the numbers, generate, and download the printable files.
+<h1>openUC2 insert &amp; plate wizard</h1>
+<p class="hint">Enter the numbers, generate, and download the files.
 Positions for the lens are measured from the centre of the cube.</p>
 <div class="tabs">
  <button id="tab-lens" class="on" onclick="show('lens')">Lens holder</button>
  <button id="tab-bs" onclick="show('bs')">Beamsplitter cube</button>
+ <button id="tab-pl" onclick="show('pl')">OPM plates</button>
 </div>
 
 <div id="panel-lens" class="panel on">
@@ -224,20 +270,77 @@ Positions for the lens are measured from the centre of the cube.</p>
  </fieldset>
 </div>
 
+<div id="panel-pl" class="panel">
+ <p class="hint">Top and base plate of an optical module, seen from above. Click cells:
+ <b>#</b> core cube cells (tie rods go through their outside corners), <b>+</b> extra puzzle
+ units hanging off any side (no rods), <b>P</b> an M37x0.5 retaining-ring port in the top plate.</p>
+ <fieldset><legend>Layout</legend>
+  <div class="row"><label>Start from</label>
+   <select id="preset" onchange="preset(this.value)" style="width:280px">
+    <option value="flim">3x8 + 1x1 (FLIM 488, PRT-1051/1052)</option>
+    <option value="3x3">3x3</option>
+    <option value="bf">3x3 + 1x2 (PRT-1047/1048)</option>
+    <option value="clear">empty grid</option></select></div>
+  <div class="row"><label>Click paints</label>
+   <select id="paint" style="width:280px">
+    <option value="#">core cube cell (#)</option>
+    <option value="+">extra puzzle unit (+)</option>
+    <option value="P">toggle M37 port (P)</option>
+    <option value=".">erase</option></select></div>
+  <div id="grid"></div>
+  <textarea name="ascii" id="ascii" rows="6" readonly></textarea>
+ </fieldset>
+ <fieldset><legend>Stack</legend>
+  <div class="row"><label>Name</label><input name="name" value="opm_plates" style="width:220px"></div>
+  <div class="row"><label>Cube layers</label><input name="layers" value="2"></div>
+  <div class="row"><label>Tie rods</label>
+   <select name="rods" style="width:220px"><option value="auto">outside corners of the # cells</option>
+    <option value="outline">every outside corner</option><option value="none">none</option></select></div>
+  <div class="row"><label>38 mm cell pockets</label>
+   <select name="pockets"><option value="on">yes</option><option value="off">no</option></select></div>
+  <div class="row"><label>Pitch x, y (mm)</label><input name="pitch_x" value="50"><input name="pitch_y" value="50.1"></div>
+  <div class="row"><label>M3 holes (mm)</label><input name="m3" value="2.46">
+   <span class="hint">2.46 = tapped M3 (aluminium); 3.2 = clearance</span></div>
+ </fieldset>
+</div>
+
 <button class="go" onclick="gen()">Generate &amp; download</button>
 <div id="out"></div>
+<img id="preview" alt="layout preview">
 
 <script>
 let kind='lens';
+const TABS={lens:'lens',bs:'beamsplitter',pl:'plates'};
 function show(k){kind=k;
- document.getElementById('tab-lens').className=k=='lens'?'on':'';
- document.getElementById('tab-bs').className=k=='bs'?'on':'';
- document.getElementById('panel-lens').className='panel'+(k=='lens'?' on':'');
- document.getElementById('panel-bs').className='panel'+(k=='bs'?' on':'');}
+ for(const t in TABS){document.getElementById('tab-'+t).className=k==t?'on':'';
+  document.getElementById('panel-'+t).className='panel'+(k==t?' on':'');}}
 function collect(){const p=document.getElementById('panel-'+kind);
- const d=new URLSearchParams(); p.querySelectorAll('input,select').forEach(e=>{if(e.name)d.append(e.name,e.value);});
- d.append('kind', kind=='lens'?'lens':'beamsplitter'); return d;}
+ const d=new URLSearchParams(); p.querySelectorAll('input,select,textarea').forEach(e=>{if(e.name)d.append(e.name,e.value);});
+ d.append('kind', TABS[kind]); return d;}
+// --- plate layout grid: G[row][col], row 0 at the bottom (plan view) ---
+const GC=12, GR=12; let G=[];
+function blank(){G=[];for(let r=0;r<GR;r++)G.push(Array(GC).fill('.'));}
+function put(c,r,ch){if(r>=0&&r<GR&&c>=0&&c<GC)G[r][c]=ch;}
+function preset(v){blank();
+ if(v=='3x3'){for(let c=1;c<4;c++)for(let r=1;r<4;r++)put(c,r,'#');}
+ if(v=='flim'){for(let c=2;c<5;c++)for(let r=1;r<9;r++)put(c,r,'#');put(1,1,'+');put(3,8,'P');}
+ if(v=='bf'){for(let c=1;c<4;c++)for(let r=3;r<6;r++)put(c,r,'#');put(2,1,'#');put(2,2,'#');}
+ draw();}
+function paint(c,r){const m=document.getElementById('paint').value, ch=G[r][c];
+ G[r][c]= m=='P' ? {'#':'P','P':'#','+':'p','p':'+','.':'P'}[ch] : m; draw();}
+function art(){let rows=[];for(let r=GR-1;r>=0;r--)rows.push(G[r].join(''));
+ const used=rows.map(s=>/[^.]/.test(s)); const a=used.indexOf(true), b=used.lastIndexOf(true);
+ if(a<0)return ''; rows=rows.slice(a,b+1); let c0=GC,c1=-1;
+ rows.forEach(s=>{for(let i=0;i<s.length;i++)if(s[i]!='.'){c0=Math.min(c0,i);c1=Math.max(c1,i);}});
+ return rows.map(s=>s.slice(c0,c1+1)).join('\\n');}
+function draw(){const g=document.getElementById('grid'); g.innerHTML='';
+ for(let r=GR-1;r>=0;r--)for(let c=0;c<GC;c++){const ch=G[r][c], d=document.createElement('div');
+  d.className='#P'.includes(ch)?'c':'+p'.includes(ch)?'e':''; d.textContent='Pp'.includes(ch)?'P':'';
+  d.onclick=()=>paint(c,r); g.appendChild(d);}
+ document.getElementById('ascii').value=art();}
+preset('flim');
 async function gen(){const out=document.getElementById('out');out.style.display='block';
+ document.getElementById('preview').style.display='none';
  out.textContent='Generating... (a few seconds)';
  let r=await fetch('/generate',{method:'POST',body:collect()});
  let j=await r.json(); if(j.error){out.textContent='Error: '+j.error;return;}
@@ -247,6 +350,7 @@ async function gen(){const out=document.getElementById('out');out.style.display=
   if(s.status!='running')break; out.textContent='Generating... '+(i/2|0)+'s';}
  if(status.status=='error'){out.textContent='Could not generate this part:\\n'+status.error;return;}
  out.textContent='Done. Downloading ZIP...\\n\\n'+JSON.stringify(status.plan,null,1);
+ if(status.preview){const im=document.getElementById('preview');im.src=status.preview;im.style.display='block';}
  let a=document.createElement('a'); a.href='/download?token='+tok;
  a.download=status.stem+'.zip'; document.body.appendChild(a); a.click(); a.remove();}
 </script>
@@ -277,7 +381,7 @@ class _Handler(BaseHTTPRequestHandler):
             if not job:
                 return self._send(404, b'{"status":"unknown"}')
             out = {"status": job["status"]}
-            out.update({k: job[k] for k in ("plan", "stem", "error") if k in job})
+            out.update({k: job[k] for k in ("plan", "stem", "error", "preview") if k in job})
             return self._send(200, json.dumps(out).encode())
         if u.path == "/download":
             token = parse_qs(u.query).get("token", [""])[0]

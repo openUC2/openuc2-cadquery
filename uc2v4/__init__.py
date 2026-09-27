@@ -6,6 +6,7 @@ in ../extracted/):
 
 - MAS - 2003 - Master Insert - B.ipt   -> master_insert.py  (PRT-2123 MASLCK)
 - MAS - 2013 - Square Inserts - V04.ipt -> lens_insert.py   (PRT-2027 INSLEND)
+- MAS - 1003 - Base plates Al - V04.ipt -> opm_plates.py    (PRT-1051/1052 OPM plates)
 
 Coordinate convention (same as the Inventor originals and the rest of the
 openuc2-cadquery repo): optical axis = Z through (0, 0), insert mid-plane at
@@ -47,8 +48,30 @@ from .lens_cartridge import (
     plan_cartridge,
 )
 from .master_insert import MasterInsertParams, build_master_insert
+from .opm_plates import (
+    Aperture,
+    CustomHole,
+    OpmPlatePlan,
+    OpmPlateSpec,
+    PlateGeometry,
+    PlateLayout,
+    Port,
+    TieRod,
+    build_opm_plates,
+    plan_opm_plates,
+)
 
 __all__ = [
+    "PlateLayout",
+    "PlateGeometry",
+    "OpmPlateSpec",
+    "OpmPlatePlan",
+    "Port",
+    "Aperture",
+    "CustomHole",
+    "TieRod",
+    "plan_opm_plates",
+    "build_opm_plates",
     "GRID_MM",
     "Lens",
     "Surface",
