@@ -9,7 +9,9 @@ For each case it checks the things that would actually bite on the bench:
 4. the lens sits where it was asked to, measured back out of the geometry in
    the cube frame;
 5. both halves stay inside the base-holder envelope, so they still drop into
-   the molded master inserts.
+   the molded master inserts;
+6. (plan only) no joint plane lies beyond +-13 mm, where the outer master insert
+   would sit on the cube's end frames.
 
 Usage:
     uv run --with cadquery python check_lens_cartridge.py
@@ -195,8 +197,25 @@ def check(name, lens, pose, params) -> bool:
     return ok
 
 
+def check_joint_limit() -> bool:
+    """Every reachable z gets a joint within +-13 mm; z past the reach is refused."""
+    lens = lc.Lens(25.4, 3.5, 51.5, -51.5)
+    ok = True
+    for i in range(-70, 71):
+        z = i * 0.25
+        try:
+            plan = lc.plan_cartridge(lens, lc.Pose(z_mm=z))
+        except ValueError:
+            ok &= abs(z) > 17.0
+            continue
+        ok &= abs(plan.joint_z_mm) <= 13.0 + 1e-9 and abs(z - plan.joint_z_mm) <= 4.0 + 1e-9
+    print(f"joint planes within +-13 mm for z in [-17.5, 17.5]: {'PASS' if ok else 'FAIL'}")
+    print()
+    return ok
+
+
 def main() -> None:
-    results = [check(*case) for case in CASES]
+    results = [check_joint_limit()] + [check(*case) for case in CASES]
     print(f"{sum(results)}/{len(results)} cases passed")
     sys.exit(0 if all(results) else 1)
 
