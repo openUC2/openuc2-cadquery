@@ -103,14 +103,19 @@ def _extent(f: Feature, p: OffGridPlateParams) -> tuple[float, float, float, flo
 
 
 def _grid_rotation(yaw: float) -> dict:
-    """The record's rotation for a part whose +x runs along the feature's beam, +y up."""
+    """The record's rotation for a part whose +x runs along the feature's beam, +y up.
+
+    The grid takes the nearest quarter turn; the rest of the yaw is a turn about the
+    part's own +y, which points up. ``offset-deg`` turns about the part's local axes,
+    and its local z lies flat (x × up): a residual about z tilted the part out of the
+    plate instead of turning it (0.7.0)."""
     q = round(yaw / 90.0) % 4
     x_axis = ("+x", "+y", "-x", "-y")[q]
     z_axis = ("-y", "+x", "+y", "-x")[q]          # x × up
     rot = {"kind": "grid", "grid": {"z": z_axis, "x": x_axis}}
     residual = yaw - 90.0 * round(yaw / 90.0)
     if abs(residual) > 1e-9:
-        rot["offset-deg"] = {"z": round(residual, 6)}
+        rot["offset-deg"] = {"y": round(residual, 6)}
     return rot
 
 

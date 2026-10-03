@@ -112,8 +112,9 @@ def main() -> None:
            f"{c.cradle['axis_height_mm']})", on_top)
 
     m = plan.mounts
+    # 47.5° = a quarter turn (+y) less 42.5° about the part's own +y, which points up
     poses = (m["grating"]["pose"]["translation"]["offset-mm"]["z"] == 30.0
-             and m["grating"]["pose"]["rotation"]["offset-deg"]["z"] == -42.5
+             and m["grating"]["pose"]["rotation"]["offset-deg"] == {"y": -42.5}
              and m["collimator"]["pose"]["rotation"]["grid"] == {"z": "+x", "x": "+y"}
              and m["camera lens"]["accepts"] == "cylinder-d33")
     report(f"docking poses for {sorted(m)}", poses)
