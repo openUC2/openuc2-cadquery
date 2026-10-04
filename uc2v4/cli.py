@@ -23,6 +23,11 @@ def main(argv: list[str] | None = None) -> int:
             "                   emission filter and 45 deg dichroic (--help for flags)\n"
             "  plates           top + base plate of an optical module (OPM) for any\n"
             "                   layout, e.g. --layout 3x8+1x1@-1,0 (--help for flags)\n"
+            "  opm-launch       dvOPM light-sheet launch holder, retainers and arc-rail\n"
+            "                   bracket from an opm_layout.json (--help for flags)\n"
+            "  opm-camera       dvOPM camera adapter: Alvium carrier at the sensor tilt in a\n"
+            "                   MASLCK/MASINS sandwich of the camera cube (opm_layout.json)\n"
+            "  opm-sample       dvOPM sample arm (dish ring on the sample stage) and dish\n"
             "  wizard           open the browser wizard to enter parameters and\n"
             "                   download parts (lens, beamsplitter or OPM plates)\n"
             "  master-insert    the molded PRT-2123 master insert, as STEP\n"
@@ -43,6 +48,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if command == "plates":
         from .opm_plates import _cli
+
+        _cli(rest)
+        return 0
+    if command == "opm-launch":
+        from .opm_launch_holder import _cli
+
+        _cli(rest)
+        return 0
+    if command == "opm-camera":
+        from .opm_camera_adapter import _cli
+
+        _cli(rest)
+        return 0
+    if command == "opm-sample":
+        from .opm_sample_holder import _cli
 
         _cli(rest)
         return 0

@@ -222,6 +222,12 @@ class CubeInterface:
     grid_mm: float = 50.0
     notch_pitch_mm: float = 5.0
     notch_count: int = 7          # -> notches at -15, -10, -5, 0, +5, +10, +15
+    # A master-insert pair whose joint lies further out than this puts its
+    # outer insert on the cube's end frames (from 17.2 mm): on the +-15 notch
+    # the second insert has to stack inward, joint at +-13.
+    joint_limit_mm: float = 13.0
+    # A round printed part up to r 19.2 stays within this of the centre (end frames).
+    round_limit_mm: float = 18.6
 
     def notch_positions(self) -> list[float]:
         k = (self.notch_count - 1) / 2.0
@@ -350,6 +356,48 @@ class CartridgePlan:
         }
 
 
+def snap_joint(z_mm: float, cube: CubeInterface, master_thickness_mm: float = 4.0,
+               notched_half: str | None = "auto") -> tuple[str, int, float, float]:
+    """Joint plane of a master-insert pair for a part at *z_mm* along the stack axis.
+
+    Returns (notched half, notch index, notch z, joint z). The notch fixes the
+    notched insert's mid-plane; the joint lies half an insert to the side the
+    second insert is stacked on, never past ``cube.joint_limit_mm``.
+    ``notched_half=None`` is the smooth, sliding pair: the joint lands on *z_mm*.
+    """
+    t = master_thickness_mm
+    if notched_half is None:
+        if abs(z_mm) > cube.joint_limit_mm + 1e-9:
+            raise ValueError(
+                f"z = {z_mm} mm: a sliding pair's joint must stay within "
+                f"+-{cube.joint_limit_mm:g} mm, or its outer insert sits on the cube's "
+                "end frame. Move the component to a neighbouring cube.")
+        return "none", -1, float("nan"), z_mm
+    sides = {"back": +1.0, "front": -1.0}
+    if notched_half == "auto":
+        candidates = list(sides.items())
+    elif notched_half in sides:
+        candidates = [(notched_half, sides[notched_half])]
+    else:
+        raise ValueError(f"notched_half must be auto/back/front, got {notched_half!r}")
+    best = None
+    for name, sign in candidates:
+        for idx, notch_z in enumerate(cube.notch_positions()):
+            joint_z = notch_z + sign * t / 2.0
+            if abs(joint_z) > cube.joint_limit_mm + 1e-9:
+                continue
+            key = abs(z_mm - joint_z)
+            if best is None or key < best[0] - 1e-9:
+                best = (key, name, idx, notch_z, joint_z)
+    if best is None or best[0] > t:
+        raise ValueError(
+            f"z = {z_mm} mm cannot be reached on the notch grid "
+            f"(joint planes within +-{cube.joint_limit_mm:g} mm, a pair absorbs "
+            f"{t:g} mm either side). Use snap_to_notch=False with the smooth "
+            "master insert, or move the component to a neighbouring cube.")
+    return best[1], best[2], best[3], best[4]
+
+
 def plan_cartridge(lens: Lens, pose: Pose,
                    cube: CubeInterface | None = None,
                    params: CartridgeParams | None = None) -> CartridgePlan:
@@ -359,39 +407,8 @@ def plan_cartridge(lens: Lens, pose: Pose,
     lens.validate()
 
     t = params.master_thickness_mm
-    if params.snap_to_notch:
-        # The notch fixes the *notched insert's mid-plane*; the joint plane sits
-        # half an insert to one side of it, on whichever side the second master
-        # insert is stacked.
-        sides = {"back": +1.0, "front": -1.0}
-        if params.notched_half == "auto":
-            candidates = list(sides.items())
-        elif params.notched_half in sides:
-            candidates = [(params.notched_half, sides[params.notched_half])]
-        else:
-            raise ValueError(f"notched_half must be auto/back/front, "
-                             f"got {params.notched_half!r}")
-
-        best = None
-        for name, sign in candidates:
-            idx, notch_z = cube.snap(pose.z_mm - sign * t / 2.0)
-            joint_z = notch_z + sign * t / 2.0
-            key = abs(pose.z_mm - joint_z)
-            if best is None or key < best[0]:
-                best = (key, name, idx, notch_z, joint_z)
-        _, half_name, idx, notch_z, joint_z = best
-
-        limit = max(cube.notch_positions())
-        if abs(notch_z) > limit + 1e-9 or abs(pose.z_mm - joint_z) > t: # TODO: We could make the insert hang out more so that it eventually goes into the cube's edge
-            raise ValueError(
-                f"z = {pose.z_mm} mm cannot be reached on the notch grid "
-                f"(notches at +-{limit} mm, pitch {cube.notch_pitch_mm} mm). "
-                "Use snap_to_notch=False with the smooth master insert, or move "
-                "the component to a neighbouring cube.")
-    else:
-        # Smooth master insert: it slides, so the joint can land exactly on z.
-        half_name, idx, notch_z, joint_z = "none", -1, float("nan"), pose.z_mm
-
+    half_name, idx, notch_z, joint_z = snap_joint(
+        pose.z_mm, cube, t, params.notched_half if params.snap_to_notch else None)
     dz = pose.z_mm - joint_z
     plan = CartridgePlan(lens=lens, pose=pose, cube=cube, params=params,
                          notch_index=idx, notch_z_mm=notch_z, joint_z_mm=joint_z,

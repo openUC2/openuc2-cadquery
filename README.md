@@ -94,6 +94,60 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > cylindrical features, same 203 faces, volume −0.012 %). Design write-up:
 > [`DOCS-opm-plates.md`](DOCS-opm-plates.md).
 
+> **dvOPM camera, launch and sample parts — `uc2v4/opm_camera_adapter.py`,
+> `uc2v4/opm_launch_holder.py`, `uc2v4/opm_sample_holder.py`.** The printed parts of the
+> direct-view OPM on a 5x4 plate. Its detection stays in openUC2 cubes: the fold mirror and the
+> reversed telecentric lens use the CAD-new modules ASS-2020 and ASS-3011 turned inside their
+> cubes, and the only new detection part is the **camera adapter** — a double base-holder disc
+> captured between a MASLCK and a MASINS like any printed round insert, with a bracket, a spine
+> and a 4 mm plate that holds the Alvium bare board at the sensor tilt (50 deg) in the cube; the
+> sensor looks through a window, four M2 hold the board from behind. The **launch holder**
+> carries the RMS-threaded 4x objective, the LJ1878L1 cylinder lens (side slot + sliding key)
+> and the f = 8 fibre collimator (side-slid fork clip); the arc-rail bracket's two concentric
+> slots pivot it about the sheet's entry point, and the bracket hangs from the launch stage's
+> slide when the slide stands above the holder. The **sample arm** is one flat slab on the
+> sample stage's slide with the dish ring. Every dimension comes from the layout model in
+> `openuc2-opmsimulator/opm_layout.py` (`opm_layout.json`):
+>
+> ```bash
+> uc2cad opm-camera ../openuc2-opmsimulator/opm_layout.json      # camera adapter -> generated/opm_detection
+> uc2cad opm-launch ../openuc2-opmsimulator/opm_layout.json      # holder, key, clip, bracket -> generated/opm_launch
+> uc2cad opm-sample ../openuc2-opmsimulator/opm_layout.json      # sample arm + dish -> generated/opm_launch
+> uv run --with cadquery python check_opm_launch_holder.py ../openuc2-opmsimulator/opm_layout.json
+> ```
+>
+> The camera cube as built (adapter, inserts, board) is checked in openuc2-opmsimulator
+> (`check_opm_detection_cubes.py`); `check_opm_launch_holder.py` verifies the thread, the seats
+> and retainers, the clamp screws and that every medium's screw position lies in the bracket's
+> slots. The plan JSON's `params` block also drives
+> `openuc2-opmsimulator/build_opm_holder_ipt.py`, which rebuilds the launch holder as a **native
+> parametric Inventor part** (35 user parameters, coil-cut RMS thread);
+> `check_opm_holder_native.py <its .stp> generated/opm_launch` samples that part against the
+> CadQuery reference. The beam-path solids (`generated/opm_launch/opm_beam_*.step`) come from
+> `openuc2-opmsimulator/opm_beam_solids.py`. `uc2v4/opm_detection_holder.py` and
+> `check_opm_detection_holder.py` are the superseded one-piece detection holder (2026-10-02).
+> Pipeline write-up: `openuc2-opmsimulator/OPM_CAD_README.md`.
+
+> **Holders for turning an optical design into cubes (2026-10-03).** The geometry behind
+> optikit-core's generators (`generators/*_v4.py` there), each with a `plan_*` that checks
+> without building and a `check_*.py` here that verifies the parts against what they hold:
+>
+> | module | holds | check |
+> |---|---|---|
+> | `round_clamp.py` | a cylinder body up to Ø34 mm (laser module, fibre collimator, tube) between two master inserts, one set screw | `check_round_clamp.py` |
+> | `kinematic_adapter.py` | any round or rectangular optic in the ½-inch kinematic mount ZJB-0.5-3, on a plate or a wedge | `check_kinematic_adapter.py` |
+> | `bolt_cradle.py` | a device by the holes in one face: an insert across the beam, or a pedestal on a plate | `check_bolt_cradle.py` |
+> | `focus_cartridge.py` | a lens in a barrel that slides ±1 mm in a round clamp, set-screw lock | `check_focus_cartridge.py` |
+> | `off_grid_plate.py` | a plate in the puzzle layer over a list of cells: kinematic pedestal, saddle, cradle, lens wall; docking poses | `check_off_grid_plate.py` |
+> | `cube_pocket.py` | a beamsplitter cube at the centre of a cell, in the fluorescence clamshell | `check_cube_pocket.py` |
+> | `slide_slot.py` | a microscope slide across the beam, stop, coverslip pocket | `check_slide_slot.py` |
+> | `sample_vessel.py` | a vial or a cuvette upright across the beam, windows, light-tight cap | `check_sample_vessel.py` |
+> | `cell_cover.py` | a light-tight cover over a list of cells with an interlock switch housing | `check_cell_cover.py` |
+>
+> `lens_cartridge.snap_joint` places every master-insert pair, and its joint plane stays within
+> ±13 mm of the cube centre (`CubeInterface.joint_limit_mm`; further out the outer insert sits
+> on the cube's end frames). optikit-core pins v0.6.0 and needs a new tag for these.
+
 > **Browser wizard — `uc2cad wizard`.** No command line needed: run it and a
 > page opens where you enter the numbers for a **lens holder** or a
 > **beamsplitter cube**, or click an **OPM plate layout** together on a grid,
