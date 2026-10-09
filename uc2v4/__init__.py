@@ -27,6 +27,15 @@ from .beamsplitter_insert import (
     plan_beamsplitter,
 )
 from .fold_insert import FoldInsertParams, FoldPlan, Plate, build_fold_insert, plan_fold_insert
+from .frame_objective_support import (
+    FrameSled,
+    ObjectiveFacts,
+    ObjectiveSupportParams,
+    ObjectiveSupportPlan,
+    build_objective_support,
+    parfocal_heights,
+    plan_objective_support,
+)
 from .lens_insert import LensInsertParams, build_lens_insert
 from .sm1_adapter import (
     SM1_MAJOR_DIAM_MM,
@@ -108,4 +117,11 @@ __all__ = [
     "SM1_PITCH_MM",
     "MasterInsertParams",
     "build_master_insert",
+    "FrameSled",
+    "ObjectiveFacts",
+    "ObjectiveSupportParams",
+    "ObjectiveSupportPlan",
+    "plan_objective_support",
+    "build_objective_support",
+    "parfocal_heights",
 ]

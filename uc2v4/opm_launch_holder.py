@@ -211,13 +211,14 @@ def _box(x0, x1, y0, y1, z0, z1) -> cq.Solid:
 
 
 def internal_thread(r_root: float, r_crest: float, pitch: float, z0: float, turns: float,
-                    crest_flat: float, embed: float = 0.05) -> cq.Solid:
+                    crest_flat: float, embed: float = 0.05, flank_deg: float = 45.0) -> cq.Solid:
     """Thread ridge of a female thread, right-handed along +Z: root on the bore wall
-    (r_root, sunk `embed` into it), crest at r_crest, 45 deg flanks, crest centre at
-    z0 and azimuth 0. Built as ruled surfaces between four helices - a swept profile
-    gives OCC a solid its booleans mishandle, this one fuses and cuts cleanly."""
+    (r_root, sunk `embed` into it), crest at r_crest, flanks `flank_deg` from radial
+    (45, or 30 for a 60 deg thread), crest centre at z0 and azimuth 0. Built as ruled
+    surfaces between four helices - a swept profile gives OCC a solid its booleans
+    mishandle, this one fuses and cuts cleanly."""
     depth = r_root - r_crest
-    hb = depth + crest_flat / 2.0
+    hb = depth * math.tan(math.radians(flank_deg)) + crest_flat / 2.0
     height = pitch * turns
     rr = r_root + embed
     zs = [z0 - hb, z0 + hb, z0 + crest_flat / 2, z0 - crest_flat / 2]

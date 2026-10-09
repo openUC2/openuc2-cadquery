@@ -148,6 +148,19 @@ Programmatic generation of an **openUC2 cube insert** and **component cutouts** 
 > ±13 mm of the cube centre (`CubeInterface.joint_limit_mm`; further out the outer insert sits
 > on the cube's end frames). optikit-core pins v0.6.0 and needs a new tag for these.
 
+> **FRAME objective supports — `uc2v4/frame_objective_support.py` (2026-10-09).** The printed
+> part between the FRAME's kinematic objective sled (FR110-0401) and an objective, as the
+> `FRAME - 0402 / 0408 - Support objective` parts are built (measured on them): a 5.2 mm flange
+> with two M2.5 lugs, a Ø25.4 boss up to the objective's shoulder, the objective's thread printed
+> in the top of the bore. Thread (RMS, M25x0.75, M26x0.706, M27x0.75, C-mount, M<Ø>x<pitch>),
+> height and label are parameters; `parfocal_heights` gives one height per slot so all
+> objectives focus in one plane (61.4 mm above the sled for two PF-45 objectives, the CAD's 16.4
+> mm supports). RMS fits as in the CAD; M25x0.75 and C-mount get screw pockets in a Ø29+ boss
+> (0.6-0.8 mm wall to the pockets); M26 and wider are refused — their bore reaches the sled's
+> M2.5 screws at r 16 mm, so they need a sled with the screws further out. `check_frame_objective_support.py [--cad <FRAME-0402.stp> 16.4]` checks the rules and
+> samples a CAD part against the model. optikit-core's `generators/frame_objective_support.py`
+> wraps it for the FRAME wizard (needs this release, v0.8.0).
+
 > **Browser wizard — `uc2cad wizard`.** No command line needed: run it and a
 > page opens where you enter the numbers for a **lens holder** or a
 > **beamsplitter cube**, or click an **OPM plate layout** together on a grid,
